@@ -15,9 +15,12 @@ router = APIRouter()
 @router.get("/health")
 async def health() -> Dict[str, Any]:
     deps = get_deps()
+    from api.app import APP_VERSION
     return {
+        "version": APP_VERSION,
         "mode": "paper" if deps.alpaca.paper else "LIVE",
         "live_trading_enabled": env_bool("LIVE_TRADING_ENABLED", False),
+        "scan_loop": deps.alerts.status(),
         "providers": {
             "fmp": {**deps.fmp.status(), "rate": deps.fmp.budget.snapshot()},
             "alpaca": {

@@ -172,6 +172,7 @@
     <strong>Alerts</strong>
     <button class="small" onclick="markAlertsSeen()">Mark all read</button>
   </div>
+  <div class="mut" id="alerts-loop-status" style="font-size:11.5px; margin-bottom:6px;"></div>
   <div id="alerts-list"><div class="empty">No alerts yet</div></div>
 </div>
 
@@ -362,6 +363,13 @@ async function loadHealth() {
       badge.textContent = "PAPER";
       badge.className = "badge paper";
     }
+    $("#version").textContent = h.version ? " v" + h.version : "";
+    const loop = h.scan_loop || {};
+    $("#alerts-loop-status").textContent =
+      `Scan loop: ${loop.enabled ? "every " + loop.interval_minutes + "m" : "disabled"}, ` +
+      `threshold ${loop.threshold}, runs ${loop.runs}` +
+      (loop.last_skip ? ` | last skip: ${loop.last_skip}` : "") +
+      (loop.last_error ? ` | last error: ${loop.last_error}` : "");
     const missing = [];
     if (!h.providers.fmp.configured) missing.push("FMP_API_KEY");
     if (!h.providers.alpaca.configured) missing.push("ALPACA_API_KEY / ALPACA_SECRET_KEY");

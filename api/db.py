@@ -94,3 +94,11 @@ def execute(sql: str, params: Iterable[Any] = ()) -> int:
     with connect() as conn:
         cur = conn.execute(sql, tuple(params))
         return cur.lastrowid or 0
+
+
+def execute_rc(sql: str, params: Iterable[Any] = ()) -> int:
+    """Run a write statement; returns affected rowcount (0 when an
+    INSERT OR IGNORE was ignored)."""
+    with connect() as conn:
+        cur = conn.execute(sql, tuple(params))
+        return cur.rowcount if cur.rowcount > 0 else 0

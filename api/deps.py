@@ -9,6 +9,7 @@ from data.alpaca_client import AlpacaClient
 from data.cache import RateBudget, TTLCache
 from data.env import ROOT, load_env
 from data.fmp_client import FMPClient
+from engine.alerts import AlertLoop
 from engine.regime import RegimeEngine
 from engine.scoring import Scanner
 
@@ -55,6 +56,7 @@ class Deps:
         db.init_db()
         self.regime = RegimeEngine(self.fmp, self.alpaca, self.config, self.cache)
         self.scanner = Scanner(self.fmp, self.alpaca, self.regime, self.config, self.cache)
+        self.alerts = AlertLoop(self.scanner, self.alpaca, self.config)
 
     async def aclose(self) -> None:
         await self.fmp.aclose()
