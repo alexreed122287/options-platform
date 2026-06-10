@@ -1,0 +1,39 @@
+{
+  "_doc": "Global runtime settings. Every tunable lives in config/*.json - no magic numbers in code.",
+  "cache_ttls_seconds": {
+    "quote": 30,
+    "stock_snapshot": 30,
+    "bars": 600,
+    "chain": 120,
+    "profile": 86400,
+    "sector_performance": 600,
+    "breadth": 600,
+    "history": 3600,
+    "account": 60,
+    "positions": 20,
+    "clock": 60,
+    "regime": 300,
+    "scan": 300
+  },
+  "rate_budgets": {
+    "fmp": { "per_minute": 60, "per_day": 1500 },
+    "alpaca_trading": { "per_minute": 180, "per_day": 100000 },
+    "alpaca_data": { "per_minute": 180, "per_day": 100000 }
+  },
+  "risk": {
+    "_doc": "Position sizing for the Review Order flow. max_risk_pct_equity is the % of account equity a single trade may put at risk (long premium = max loss).",
+    "max_risk_pct_equity": 1.0,
+    "max_contracts_per_order": 10
+  },
+  "scan": {
+    "_doc": "Background alert scan loop (Phase 5).",
+    "enabled": true,
+    "interval_minutes": 15,
+    "alert_score_threshold": 75,
+    "market_hours_only": true,
+    "concurrency": 3
+  },
+  "server": {
+    "default_port": 8787
+  }
+}
