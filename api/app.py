@@ -10,7 +10,7 @@ from api.routes_market import router as market_router
 from api.routes_trading import router as trading_router
 from data.env import ROOT
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 log = logging.getLogger("api.app")
 

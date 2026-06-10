@@ -18,7 +18,9 @@ async def health() -> Dict[str, Any]:
     from api.app import APP_VERSION
     return {
         "version": APP_VERSION,
-        "mode": "paper" if deps.alpaca.paper else "LIVE",
+        "broker": deps.broker_name,
+        "data_source": deps.data_source_name,
+        "mode": "paper" if deps.broker.paper else "LIVE",
         "live_trading_enabled": env_bool("LIVE_TRADING_ENABLED", False),
         "scan_loop": deps.alerts.status(),
         "providers": {
@@ -28,6 +30,7 @@ async def health() -> Dict[str, Any]:
                 "rate_trading": deps.alpaca.budget.snapshot(),
                 "rate_data": deps.alpaca.budget_data.snapshot(),
             },
+            "public": {**deps.public.status(), "rate": deps.public.budget.snapshot()},
         },
         "cache": deps.cache.stats(),
     }

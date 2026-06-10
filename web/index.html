@@ -356,11 +356,12 @@ async function loadHealth() {
   try {
     const h = await api("/health");
     const badge = $("#mode-badge");
+    const broker = (h.broker || "alpaca").toUpperCase();
     if (h.mode === "LIVE") {
-      badge.textContent = h.live_trading_enabled ? "LIVE" : "LIVE (orders blocked)";
+      badge.textContent = broker + (h.live_trading_enabled ? " LIVE" : " LIVE (orders blocked)");
       badge.className = "badge live";
     } else {
-      badge.textContent = "PAPER";
+      badge.textContent = broker + " PAPER";
       badge.className = "badge paper";
     }
     $("#version").textContent = h.version ? " v" + h.version : "";
@@ -581,7 +582,7 @@ function renderOrderModal() {
   const qty = Math.max(p.suggested_qty, 0);
   $("#modal-root").innerHTML = `
     <div class="modal">
-      <h2>Review Order <span class="badge ${live ? "live" : "paper"}">${live ? "LIVE" : "PAPER"}</span></h2>
+      <h2>Review Order <span class="badge ${live ? "live" : "paper"}">${esc((p.broker || "").toUpperCase())} ${live ? "LIVE" : "PAPER"}</span></h2>
       <div class="sub mono">${esc(p.occ_symbol)} (${esc(p.underlying || "?")}) - buy to open, day limit</div>
 
       <div class="kv">
@@ -610,7 +611,7 @@ function renderOrderModal() {
 
       ${live ? `
         <div class="live-warning">
-          <strong>REAL MONEY.</strong> This order goes to the live Alpaca account.
+          <strong>REAL MONEY.</strong> This order goes to the live ${esc(p.broker || "broker")} account${p.broker === "public" ? " (Public has no paper environment)" : ""}.
           ${p.live_blocked_by_env
             ? "Blocked: set LIVE_TRADING_ENABLED=true in .env to allow live orders."
             : 'Type <strong>LIVE</strong> to enable the confirm button.'}
@@ -822,7 +823,7 @@ async function loadJournal() {
           <tr>
             <td>${it.id}</td>
             <td class="mut">${esc((it.created_at || "").replace("T", " ").slice(0, 16))}</td>
-            <td class="mono">${esc(it.occ_symbol)}${it.paper ? "" : ' <span class="badge live">LIVE</span>'}</td>
+            <td class="mono">${esc(it.occ_symbol)}${it.paper ? "" : ` <span class="badge live">${esc((it.broker || "").toUpperCase())} LIVE</span>`}</td>
             <td>${it.qty}</td>
             <td>${money(it.limit_price)}</td>
             <td>${it.filled_avg_price ? money(it.filled_avg_price) : "-"}</td>

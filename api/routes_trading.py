@@ -1,10 +1,16 @@
 """Trading routes: account, positions, order preview/submit, journal, alerts.
 
+The active broker (deps.broker) is Alpaca or Public per the BROKER env var.
+Both expose the same normalized interface: account(), positions(),
+option_latest_quote(), submit_order(), get_order(), and a .paper property.
+Public's .paper is always False - Public has no paper environment.
+
 SAFETY INVARIANTS (do not weaken):
 - POST /orders requires confirmed=true - the UI confirmation step. This
   applies in paper mode too. No other code path submits orders.
-- Live mode additionally requires BOTH the LIVE_TRADING_ENABLED env flag and
-  live_ack == "LIVE" typed in the UI.
+- Live mode (Alpaca with ALPACA_PAPER=false, or Public always) additionally
+  requires BOTH the LIVE_TRADING_ENABLED env flag and live_ack == "LIVE"
+  typed in the UI.
 """
 import datetime as dt
 import json
@@ -42,6 +48,7 @@ def _trim_order(order: Dict[str, Any]) -> Dict[str, Any]:
         "type": order.get("type"),
         "time_in_force": order.get("time_in_force"),
         "submitted_at": order.get("submitted_at"),
+        "reject_reason": order.get("reject_reason"),
     }
 
 
@@ -73,20 +80,22 @@ class CloseRequest(BaseModel):
 async def account() -> Dict[str, Any]:
     deps = get_deps()
     try:
-        fetched = await deps.alpaca.account()
+        fetched = await deps.broker.account()
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    return {"account": fetched.data, "stale": fetched.stale, "as_of": fetched.as_of_iso}
+    return {"account": fetched.data, "broker": deps.broker_name,
+            "stale": fetched.stale, "as_of": fetched.as_of_iso}
 
 
 @router.get("/positions")
 async def positions() -> Dict[str, Any]:
     deps = get_deps()
     try:
-        fetched = await deps.alpaca.positions()
+        fetched = await deps.broker.positions()
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    return {"positions": fetched.data, "stale": fetched.stale, "as_of": fetched.as_of_iso}
+    return {"positions": fetched.data, "broker": deps.broker_name,
+            "stale": fetched.stale, "as_of": fetched.as_of_iso}
 
 
 # ----------------------------------------------------------------- orders
@@ -94,13 +103,13 @@ async def positions() -> Dict[str, Any]:
 @router.post("/orders/preview")
 async def order_preview(req: OrderPreviewRequest) -> Dict[str, Any]:
     deps = get_deps()
-    occ = req.occ_symbol.strip().upper()
+    occ = req.occ_symbol.strip().upper().replace(" ", "")
     if not OCC_RE.match(occ):
         raise HTTPException(status_code=400, detail="invalid OCC symbol")
     risk = deps.config.get("settings")["risk"]
     try:
-        quote = await deps.alpaca.option_latest_quote(occ)
-        acct = await deps.alpaca.account()
+        quote = await deps.broker.option_latest_quote(occ)
+        acct = await deps.broker.account()
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -122,10 +131,13 @@ async def order_preview(req: OrderPreviewRequest) -> Dict[str, Any]:
         warnings.append("no live bid/ask for this contract right now")
 
     cached = deps.scanner.find_cached(occ)
-    live_mode = not deps.alpaca.paper
+    live_mode = not deps.broker.paper
+    if deps.broker_name == "public":
+        warnings.append("Public has no paper environment - this order would use real money")
     return {
         "occ_symbol": occ,
         "underlying": _occ_underlying(occ),
+        "broker": deps.broker_name,
         "bid": quote["bid"],
         "ask": quote["ask"],
         "mid": quote["mid"],
@@ -150,7 +162,7 @@ async def order_preview(req: OrderPreviewRequest) -> Dict[str, Any]:
 @router.post("/orders")
 async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
     deps = get_deps()
-    occ = req.occ_symbol.strip().upper()
+    occ = req.occ_symbol.strip().upper().replace(" ", "")
     if not OCC_RE.match(occ):
         raise HTTPException(status_code=400, detail="invalid OCC symbol")
 
@@ -169,13 +181,14 @@ async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
             detail=f"qty {req.qty} exceeds max_contracts_per_order ({max_qty})",
         )
 
-    live_mode = not deps.alpaca.paper
+    # Public is always real money; Alpaca is live when ALPACA_PAPER=false.
+    live_mode = not deps.broker.paper
     if live_mode:
         if not env_bool("LIVE_TRADING_ENABLED", False):
             raise HTTPException(
                 status_code=403,
-                detail="live mode blocked: set LIVE_TRADING_ENABLED=true in .env "
-                       "to allow real-money orders",
+                detail=f"live mode blocked ({deps.broker_name} is real money): "
+                       "set LIVE_TRADING_ENABLED=true in .env to allow live orders",
             )
         if (req.live_ack or "").strip() != "LIVE":
             raise HTTPException(
@@ -186,7 +199,7 @@ async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
     # Fat-finger guard: block limits far above the current ask unless overridden.
     quote = None
     try:
-        quote = await deps.alpaca.option_latest_quote(occ)
+        quote = await deps.broker.option_latest_quote(occ)
     except ProviderError:
         pass
     if (
@@ -201,7 +214,7 @@ async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
         )
 
     try:
-        order = await deps.alpaca.submit_order(occ, req.qty, req.limit_price)
+        order = await deps.broker.submit_order(occ, req.qty, req.limit_price)
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=f"order rejected: {exc}")
 
@@ -216,8 +229,9 @@ async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
         """
         INSERT INTO journal (
           created_at, order_id, occ_symbol, underlying, side, qty, limit_price,
-          status, regime_label, regime_score, score_total, score_breakdown, paper
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, regime_label, regime_score, score_total, score_breakdown,
+          paper, broker
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             dt.datetime.now().isoformat(timespec="seconds"),
@@ -232,16 +246,18 @@ async def order_submit(req: OrderSubmitRequest) -> Dict[str, Any]:
             regime["score"] if regime else None,
             (cached or {}).get("score"),
             json.dumps(cached["components"]) if cached and cached.get("components") else None,
-            1 if deps.alpaca.paper else 0,
+            1 if deps.broker.paper else 0,
+            deps.broker_name,
         ),
     )
-    return {"order": _trim_order(order), "journal_id": journal_id}
+    return {"order": _trim_order(order), "journal_id": journal_id,
+            "broker": deps.broker_name}
 
 
 @router.get("/orders/{order_id}")
 async def order_status(order_id: str) -> Dict[str, Any]:
     try:
-        order = await get_deps().alpaca.get_order(order_id)
+        order = await get_deps().broker.get_order(order_id)
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"order": _trim_order(order)}
@@ -330,8 +346,10 @@ async def journal_sync(journal_id: int) -> Dict[str, Any]:
     entry = rows[0]
     if not entry["order_id"]:
         raise HTTPException(status_code=400, detail="entry has no order id")
+    deps = get_deps()
+    broker = deps.public if entry.get("broker") == "public" else deps.alpaca
     try:
-        order = await get_deps().alpaca.get_order(entry["order_id"])
+        order = await broker.get_order(entry["order_id"])
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     filled = order.get("filled_avg_price")

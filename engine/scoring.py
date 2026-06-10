@@ -201,9 +201,9 @@ def compute_contract_score(contract: Dict[str, Any], ctx: Dict[str, Any],
 # --------------------------------------------------------------- scanner
 
 class Scanner:
-    def __init__(self, fmp, alpaca, regime_engine, config, cache):
+    def __init__(self, fmp, market_data, regime_engine, config, cache):
         self.fmp = fmp
-        self.alpaca = alpaca
+        self.market_data = market_data  # alpaca or public, per DATA_SOURCE
         self.regime = regime_engine
         self.config = config
         self.cache = cache
@@ -248,26 +248,36 @@ class Scanner:
                            sem: asyncio.Semaphore) -> Dict[str, Any]:
         async with sem:
             try:
-                snap = await self.alpaca.stock_snapshot(symbol)
+                snap = await self.market_data.stock_snapshot(symbol)
                 spot = snap.data.get("price")
                 stale = snap.stale
                 if not spot:
                     return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                             "stale": stale, "error": "no spot price"}
 
+                # Trend: data-source bars first, FMP history as fallback
+                # (Public has no bars endpoint at all).
                 trend01 = None
+                closes = None
                 try:
-                    bars = await self.alpaca.bars(symbol, 120)
-                    trend01 = trend_structure([r["close"] for r in bars.data])["score"]
+                    bars = await self.market_data.bars(symbol, 120)
+                    closes = [r["close"] for r in bars.data]
                     stale = stale or bars.stale
-                except ProviderError as exc:
-                    log.warning("trend unavailable for %s: %s", symbol, exc)
+                except ProviderError:
+                    try:
+                        hist = await self.fmp.history(symbol, 120)
+                        closes = [r["close"] for r in hist.data]
+                        stale = stale or hist.stale
+                    except ProviderError as exc:
+                        log.warning("trend unavailable for %s: %s", symbol, exc)
+                if closes:
+                    trend01 = trend_structure(closes)["score"]
 
                 today = dt.date.today()
                 band = cfg["dte_band"]
                 pad = int(band["falloff_days"])
                 window = cfg["chain_window"]
-                chain = await self.alpaca.chain(
+                chain = await self.market_data.chain(
                     symbol,
                     cfg.get("side", "call"),
                     exp_gte=(today + dt.timedelta(days=max(0, int(band["min"]) - pad))).isoformat(),

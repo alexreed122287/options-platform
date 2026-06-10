@@ -7,8 +7,9 @@ from typing import Any, Dict, Optional, Tuple
 from api import db
 from data.alpaca_client import AlpacaClient
 from data.cache import RateBudget, TTLCache
-from data.env import ROOT, load_env
+from data.env import ROOT, env, load_env
 from data.fmp_client import FMPClient
+from data.public_client import PublicClient
 from engine.alerts import AlertLoop
 from engine.regime import RegimeEngine
 from engine.scoring import Scanner
@@ -53,14 +54,37 @@ class Deps:
             RateBudget("alpaca_data", **budgets["alpaca_data"]),
             ttls,
         )
+        self.public = PublicClient(
+            self.cache,
+            RateBudget("public", **budgets["public"]),
+            ttls,
+            settings.get("public", {}),
+        )
+
+        # Broker = who holds the account and executes orders.
+        # Data source = who feeds the scanner (chains/greeks/spot).
+        # Public is ALWAYS real money (no paper environment exists there).
+        self.broker_name = (env("BROKER", "alpaca") or "alpaca").lower()
+        if self.broker_name not in ("alpaca", "public"):
+            log.warning("unknown BROKER=%s, falling back to alpaca", self.broker_name)
+            self.broker_name = "alpaca"
+        self.broker = self.public if self.broker_name == "public" else self.alpaca
+
+        self.data_source_name = (env("DATA_SOURCE", "alpaca") or "alpaca").lower()
+        if self.data_source_name not in ("alpaca", "public"):
+            log.warning("unknown DATA_SOURCE=%s, falling back to alpaca", self.data_source_name)
+            self.data_source_name = "alpaca"
+        self.market_data = self.public if self.data_source_name == "public" else self.alpaca
+
         db.init_db()
         self.regime = RegimeEngine(self.fmp, self.alpaca, self.config, self.cache)
-        self.scanner = Scanner(self.fmp, self.alpaca, self.regime, self.config, self.cache)
-        self.alerts = AlertLoop(self.scanner, self.alpaca, self.config)
+        self.scanner = Scanner(self.fmp, self.market_data, self.regime, self.config, self.cache)
+        self.alerts = AlertLoop(self.scanner, self.market_data, self.config)
 
     async def aclose(self) -> None:
         await self.fmp.aclose()
         await self.alpaca.aclose()
+        await self.public.aclose()
 
 
 _deps: Optional[Deps] = None

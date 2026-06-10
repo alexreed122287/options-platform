@@ -11,18 +11,33 @@ from .env import env
 
 log = logging.getLogger("data.http")
 
-_SECRET_ENV_NAMES = ("FMP_API_KEY", "ALPACA_API_KEY", "ALPACA_SECRET_KEY")
+_SECRET_ENV_NAMES = (
+    "FMP_API_KEY", "ALPACA_API_KEY", "ALPACA_SECRET_KEY", "PUBLIC_API_SECRET",
+)
 _APIKEY_RE = re.compile(r"(apikey=)[^&\s\"']+", re.IGNORECASE)
+
+# Secrets minted at runtime (e.g. Public JWT access tokens) that must also be
+# scrubbed from any log/error output.
+_DYNAMIC_SECRETS: set = set()
+
+
+def register_secret(value: str) -> None:
+    if value:
+        _DYNAMIC_SECRETS.add(value)
 
 
 def redact(text: str) -> str:
-    """Scrub API keys from any string destined for logs or error messages."""
+    """Scrub API keys and runtime tokens from any string destined for logs
+    or error messages."""
     if not text:
         return text
     out = _APIKEY_RE.sub(r"\1***", text)
     for name in _SECRET_ENV_NAMES:
         value = env(name)
         if value and value in out:
+            out = out.replace(value, "***")
+    for value in _DYNAMIC_SECRETS:
+        if value in out:
             out = out.replace(value, "***")
     return out
 

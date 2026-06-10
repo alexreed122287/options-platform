@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS journal (
   closed_at TEXT,
   exit_price REAL,
   realized_pnl REAL,
-  paper INTEGER NOT NULL DEFAULT 1
+  paper INTEGER NOT NULL DEFAULT 1,
+  broker TEXT NOT NULL DEFAULT 'alpaca'
 );
 CREATE TABLE IF NOT EXISTS alerts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +83,12 @@ def connect():
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # migrations for databases created before a column existed
+        journal_cols = {row["name"] for row in conn.execute("PRAGMA table_info(journal)")}
+        if "broker" not in journal_cols:
+            conn.execute(
+                "ALTER TABLE journal ADD COLUMN broker TEXT NOT NULL DEFAULT 'alpaca'"
+            )
 
 
 def query(sql: str, params: Iterable[Any] = ()) -> List[Dict[str, Any]]:

@@ -1,12 +1,17 @@
 # Options Platform
 
 AI-assisted options trading platform: market regime scoring, contract
-scanning and ranking, and a confirm-gated paper/live order flow on Alpaca,
-with FMP for fundamentals and market data.
+scanning and ranking, and a confirm-gated order flow on your choice of
+brokerage - Alpaca (paper or live) or Public.com - with FMP for fundamentals
+and market data.
 
 **Safety first:** starts in Alpaca PAPER mode. No order is ever submitted
 without an explicit confirmation step in the UI - even on paper. Live mode
 requires two extra, deliberate switches (see Going Live).
+
+**Public.com is always real money.** Public's API has no paper environment,
+so the platform treats `BROKER=public` as live: every order requires
+`LIVE_TRADING_ENABLED=true` AND the typed LIVE acknowledgment, no exceptions.
 
 ## Quick start
 
@@ -38,6 +43,10 @@ without keys are skipped gracefully.
 | `ALPACA_API_KEY` | (none) | Alpaca key id (paper keys from the Paper account view) |
 | `ALPACA_SECRET_KEY` | (none) | Alpaca secret |
 | `ALPACA_PAPER` | `true` | `true` = paper endpoint, `false` = real money endpoint |
+| `PUBLIC_API_SECRET` | (none) | Public.com API secret (public.com Settings -> Security -> API) |
+| `BROKER` | `alpaca` | Order execution + account: `alpaca` or `public` (Public = real money only) |
+| `DATA_SOURCE` | `alpaca` | Scanner data (chains/greeks/spot): `alpaca` or `public` |
+| `PUBLIC_ACCOUNT_ID` | auto | Override Public brokerage account id (auto-discovered otherwise) |
 | `LIVE_TRADING_ENABLED` | `false` | Second gate for live orders; ignored while paper |
 | `ALPACA_DATA_FEED` | `iex` | Stock data feed; `sip` if your plan includes it |
 | `ALPACA_OPTIONS_FEED` | `indicative` | Options feed; `opra` if your plan includes it |
@@ -60,9 +69,11 @@ config/
 data/                   provider layer
   fmp_client.py         FMP stable endpoints with legacy /api/v3 fallback
   alpaca_client.py      trading + market data APIs, merged option chains
+  public_client.py      Public.com: JWT auth from API secret, portfolio,
+                        per-expiration chains with greeks, async orders
   cache.py              TTL cache (keeps stale entries for outage fallback),
                         per-provider rolling rate budgets with logging
-  base.py               shared HTTP, secret redaction, provider health
+  base.py               shared HTTP, secret + runtime-token redaction, health
   smoke_test.py         python -m data.smoke_test
 engine/                 pure math + orchestration
   indicators.py         EMA / trend structure
@@ -85,6 +96,25 @@ Data flow: clients return `Fetched(data, stale, as_of)` wrappers. When a
 provider call fails and a previous value exists in cache, the stale value is
 served with `stale=true`, which the dashboard surfaces as a banner - never a
 silent failure. Hard failures surface as `degraded` entries with reasons.
+
+### Brokers and data sources
+
+`BROKER` picks who holds the account and executes orders; `DATA_SOURCE`
+picks who feeds the scanner. Any combination works:
+
+| | Alpaca | Public |
+|---|---|---|
+| Paper trading | yes (default) | NO - real money only |
+| Options chain + greeks | snapshots API (`indicative` feed) | per-expiration chain API |
+| Historical bars (trend) | yes | no - FMP history fills in automatically |
+| Market clock | yes | no - ET 9:30-16:00 weekday fallback |
+| Order placement | synchronous status | asynchronous (submission != execution) |
+
+Notes for `DATA_SOURCE=public`: chains are fetched one expiration at a time
+(capped by `public.max_expirations_per_chain` in `config/settings.json`), and
+per-ticker trend falls back to FMP history since Public has no bars endpoint.
+Option symbols are normalized to compact OCC everywhere (OSI padding from
+Public responses is stripped).
 
 ## How scoring works
 
@@ -148,10 +178,22 @@ table. The loop only notifies - it cannot submit orders.
   `config/scoring.json` filters.
 - **Rate budget warnings in logs** - raise TTLs in `config/settings.json`
   or trim the universe.
+- **Public 401s** - the JWT is auto-refreshed (one retry per request); if it
+  persists, regenerate the API secret at public.com and update `.env`.
+- **Public scan feels slow** - chains are per-expiration; lower
+  `public.max_expirations_per_chain` or tighten the DTE band in
+  `config/scoring.json`.
 
 ## Going live checklist
 
-Work through ALL of these, in order, before flipping any switch:
+Work through ALL of these, in order, before flipping any switch.
+
+**If you are going live via Public.com:** there is no paper rehearsal at
+Public - validate the whole workflow on Alpaca paper first (same UI, same
+scoring, same order flow), confirm options trading is enabled on your Public
+account, then set `BROKER=public`, `LIVE_TRADING_ENABLED=true`, and keep
+`max_contracts_per_order` at 1 for the first trades. Public order placement
+is asynchronous - use the Journal Sync button to confirm fills.
 
 1. Run paper for at least several weeks; use the Journal stats (win rate,
    profit factor) to confirm the strategy and the platform behave as
@@ -175,7 +217,8 @@ Work through ALL of these, in order, before flipping any switch:
 
 - `POST /api/orders` rejects anything without `confirmed: true` - paper
   included. The UI confirmation step is mandatory by construction.
-- Live orders require `ALPACA_PAPER=false` AND `LIVE_TRADING_ENABLED=true`
-  AND the typed `LIVE` acknowledgment per order.
+- Live orders require `LIVE_TRADING_ENABLED=true` AND the typed `LIVE`
+  acknowledgment per order. "Live" means Alpaca with `ALPACA_PAPER=false`,
+  or Public always - Public has no paper mode and is never treated as one.
 - The alert loop and every other background path can read but never trade.
 - All thresholds and weights live in `config/*.json`, hot-reloaded on edit.

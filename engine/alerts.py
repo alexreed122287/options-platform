@@ -23,9 +23,9 @@ ET = ZoneInfo("America/New_York")
 
 
 class AlertLoop:
-    def __init__(self, scanner, alpaca, config):
+    def __init__(self, scanner, market_data, config):
         self.scanner = scanner
-        self.alpaca = alpaca
+        self.market_data = market_data  # alpaca or public, per DATA_SOURCE
         self.config = config
         self.runs = 0
         self.last_run: Optional[str] = None
@@ -84,24 +84,32 @@ class AlertLoop:
 
     # --------------------------------------------------------------- loop
 
+    async def _market_open(self) -> bool:
+        """Market-hours check: broker clock when the data source has one
+        (Alpaca), otherwise a deterministic ET weekday 9:30-16:00 window
+        (Public exposes no clock endpoint)."""
+        if hasattr(self.market_data, "clock"):
+            try:
+                clock = await self.market_data.clock()
+                return bool(clock.data["is_open"])
+            except ProviderError as exc:
+                log.warning("clock unavailable, using ET window fallback: %s", exc)
+        now = dt.datetime.now(ET)
+        return (now.weekday() < 5
+                and dt.time(9, 30) <= now.time() < dt.time(16, 0))
+
     async def _tick(self) -> None:
         cfg = self.config.get("settings")["scan"]
         self.last_skip = None
         if not cfg.get("enabled", True):
             self.last_skip = "scan disabled in config/settings.json"
             return
-        if not self.alpaca.configured:
-            self.last_skip = "alpaca keys not configured - scan skipped"
+        if not self.market_data.configured:
+            self.last_skip = f"{self.market_data.name} keys not configured - scan skipped"
             return
-        if cfg.get("market_hours_only", True):
-            try:
-                clock = await self.alpaca.clock()
-                if not clock.data["is_open"]:
-                    self.last_skip = "market closed"
-                    return
-            except ProviderError as exc:
-                self.last_error = f"clock unavailable: {exc}"
-                return
+        if cfg.get("market_hours_only", True) and not await self._market_open():
+            self.last_skip = "market closed"
+            return
 
         result = await self.scanner.scan(refresh=True)
         threshold = float(cfg.get("alert_score_threshold", 75))
