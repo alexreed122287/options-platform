@@ -1,9 +1,8 @@
-name: Deploy dashboard demo to GitHub Pages
+name: Publish dashboard demo to GitHub Pages
 
-# Publishes web/index.html to GitHub Pages. On github.io the dashboard runs
-# in DEMO MODE automatically: sample data, order submission disabled, no
-# keys or backend involved. Requires the repo to be public (or a paid plan)
-# and Pages enabled with the "GitHub Actions" source.
+# Publishes web/ to the gh-pages branch; GitHub Pages serves it from there.
+# On github.io the dashboard runs in DEMO MODE automatically: sample data,
+# order submission disabled, no keys or backend involved.
 
 on:
   push:
@@ -12,27 +11,28 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Push web/ to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/site
+          cp -r web/. /tmp/site/
+          touch /tmp/site/.nojekyll
+          cd /tmp/site
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish dashboard demo"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
