@@ -1,0 +1,7 @@
+{
+  "_doc": "Tickers scanned by the recommendation engine; also the sample used for the breadth component of the regime score.",
+  "tickers": [
+    "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
+    "TSLA", "AMD", "NFLX", "AVGO", "CRM", "COST", "JPM"
+  ]
+}

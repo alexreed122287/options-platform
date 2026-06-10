@@ -1,0 +1,31 @@
+{
+  "_doc": "Market regime scoring. Each component scores 0..1 and is weighted into a 0-100 composite. Labels: score >= risk_on_min -> risk-on, score <= risk_off_max -> risk-off, else neutral.",
+  "weights": {
+    "spy_trend": 0.35,
+    "breadth": 0.25,
+    "vix": 0.25,
+    "sector_rotation": 0.15
+  },
+  "labels": { "risk_on_min": 65, "risk_off_max": 40 },
+  "spy": { "bars_days": 120 },
+  "vix": {
+    "_doc": "Level: <= level_low scores 1.0, >= level_high scores 0.0, linear between. Direction: change over direction_lookback_sessions; -direction_scale_pct scores 1.0, +direction_scale_pct scores 0.0.",
+    "level_low": 15,
+    "level_high": 25,
+    "direction_lookback_sessions": 5,
+    "direction_scale_pct": 10,
+    "level_weight": 0.7,
+    "direction_weight": 0.3
+  },
+  "breadth": {
+    "_doc": "Fraction of universe tickers positive on the day, blended with fraction of sectors positive.",
+    "universe_weight": 0.5,
+    "sectors_weight": 0.5
+  },
+  "sector_rotation": {
+    "_doc": "Offensive-minus-defensive average day change in pct points. diff >= +scale_pct -> 1.0, <= -scale_pct -> 0.0.",
+    "scale_pct": 1.0,
+    "offensive": ["Technology", "Consumer Cyclical", "Communication Services", "Industrials"],
+    "defensive": ["Utilities", "Consumer Defensive", "Healthcare", "Real Estate"]
+  }
+}
