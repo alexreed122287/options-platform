@@ -1,0 +1,61 @@
+{
+  "_doc": "Contract scoring. Weights are normalized by their sum; each component scores 0..1; total = 100 * weighted average. All bands and filters live here - no magic numbers in code.",
+  "side": "call",
+  "top_n": 15,
+  "weights": {
+    "delta_fit": 0.2,
+    "extrinsic": 0.15,
+    "spread": 0.15,
+    "open_interest": 0.1,
+    "volume": 0.1,
+    "iv_rank": 0.1,
+    "dte_fit": 0.1,
+    "trend_alignment": 0.1
+  },
+  "delta_band": {
+    "_doc": "Target |delta| range. 1.0 inside, linear falloff to 0 over `falloff` outside.",
+    "min": 0.6,
+    "max": 0.8,
+    "falloff": 0.15
+  },
+  "dte_band": {
+    "_doc": "Target days-to-expiry range, falloff in days. Also widens the chain fetch window.",
+    "min": 25,
+    "max": 60,
+    "falloff_days": 15
+  },
+  "extrinsic": {
+    "_doc": "Extrinsic premium as fraction of mid. <= best_max_pct scores 1.0, >= worst_pct scores 0.0.",
+    "best_max_pct": 0.1,
+    "worst_pct": 0.4
+  },
+  "spread": {
+    "_doc": "(ask - bid) / mid. <= best_max_pct scores 1.0, >= worst_pct scores 0.0.",
+    "best_max_pct": 0.02,
+    "worst_pct": 0.1
+  },
+  "open_interest": { "floor": 100, "full_credit": 2000 },
+  "volume": { "floor": 10, "full_credit": 1000 },
+  "iv_rank": {
+    "_doc": "Percentile of today's ATM IV vs the trailing 90 days stored in iv_history. Neutral 0.5 until min_history_days of history exists.",
+    "prefer_low": true,
+    "min_history_days": 10
+  },
+  "trend_alignment": {
+    "_doc": "Blend of the underlying's own EMA trend score and the market regime score.",
+    "trend_weight": 0.6,
+    "regime_weight": 0.4
+  },
+  "filters": {
+    "min_open_interest": 50,
+    "min_volume": 0,
+    "max_spread_pct": 0.15,
+    "min_mid": 0.2,
+    "require_greeks": true
+  },
+  "chain_window": {
+    "_doc": "Strike window fetched per underlying relative to spot; expiry window is the dte band padded by falloff_days.",
+    "strike_itm_pct": 0.3,
+    "strike_otm_pct": 0.08
+  }
+}

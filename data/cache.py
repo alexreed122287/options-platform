@@ -53,6 +53,11 @@ class TTLCache:
         with self._lock:
             self._entries[key] = _Entry(value, now, now + ttl)
 
+    def peek(self, key: str) -> Optional[Any]:
+        """Return the cached value regardless of freshness, else None."""
+        entry = self._get_entry(key)
+        return entry.value if entry else None
+
     async def get_or_fetch(
         self, key: str, ttl: float, fetch: Callable[[], Awaitable[Any]]
     ) -> Fetched:

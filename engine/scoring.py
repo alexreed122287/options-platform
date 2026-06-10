@@ -1,0 +1,361 @@
+"""Contract scoring engine.
+
+Pure scoring functions (deterministic, unit-tested) plus the Scanner that
+applies them across the configured universe. Every component of a score is
+returned in the breakdown - raw value, 0..1 score, normalized weight, and
+contribution - so the UI can show exactly why a contract ranked where it did.
+"""
+import asyncio
+import datetime as dt
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+from api import db
+from data.base import ProviderError
+from engine.indicators import clamp01, trend_structure
+
+log = logging.getLogger("engine.scoring")
+
+ET = ZoneInfo("America/New_York")
+
+
+# ------------------------------------------------------ pure scoring math
+
+def linear_score(value: Optional[float], best: float, worst: float) -> float:
+    """1.0 at `best`, 0.0 at `worst`, linear in between; works in either
+    direction (best below or above worst)."""
+    if value is None:
+        return 0.0
+    if best == worst:
+        return 1.0 if value == best else 0.0
+    return clamp01((value - worst) / (best - worst))
+
+
+def band_score(value: Optional[float], lo: float, hi: float, falloff: float) -> float:
+    """1.0 inside [lo, hi]; linear falloff to 0.0 over `falloff` outside."""
+    if value is None:
+        return 0.0
+    if lo <= value <= hi:
+        return 1.0
+    if falloff <= 0:
+        return 0.0
+    if value < lo:
+        return clamp01(1.0 - (lo - value) / falloff)
+    return clamp01(1.0 - (value - hi) / falloff)
+
+
+def score_delta_fit(delta: Optional[float], cfg: Dict[str, Any]) -> float:
+    band = cfg["delta_band"]
+    value = abs(delta) if delta is not None else None
+    return band_score(value, band["min"], band["max"], band["falloff"])
+
+
+def extrinsic_pct(mid: Optional[float], strike: float, spot: Optional[float],
+                  side: str = "call") -> Optional[float]:
+    """Extrinsic premium as a fraction of total premium (0..1)."""
+    if not mid or mid <= 0 or not spot:
+        return None
+    intrinsic = max(0.0, (spot - strike) if side == "call" else (strike - spot))
+    extrinsic = max(0.0, mid - intrinsic)
+    return min(1.0, extrinsic / mid)
+
+
+def score_extrinsic(ext_pct: Optional[float], cfg: Dict[str, Any]) -> float:
+    e = cfg["extrinsic"]
+    if ext_pct is None:
+        return 0.0
+    if ext_pct <= e["best_max_pct"]:
+        return 1.0
+    return linear_score(ext_pct, e["best_max_pct"], e["worst_pct"])
+
+
+def spread_pct(contract: Dict[str, Any]) -> Optional[float]:
+    bid, ask, mid = contract.get("bid"), contract.get("ask"), contract.get("mid")
+    if not mid or mid <= 0 or bid is None or ask is None:
+        return None
+    return max(0.0, (ask - bid) / mid)
+
+
+def score_spread(spr_pct: Optional[float], cfg: Dict[str, Any]) -> float:
+    s = cfg["spread"]
+    if spr_pct is None:
+        return 0.0
+    if spr_pct <= s["best_max_pct"]:
+        return 1.0
+    return linear_score(spr_pct, s["best_max_pct"], s["worst_pct"])
+
+
+def score_open_interest(oi: Optional[float], cfg: Dict[str, Any]) -> float:
+    o = cfg["open_interest"]
+    if oi is None:
+        return 0.0
+    return clamp01((oi - o["floor"]) / max(1.0, o["full_credit"] - o["floor"]))
+
+
+def score_volume(volume: Optional[float], cfg: Dict[str, Any]) -> float:
+    v = cfg["volume"]
+    if volume is None:
+        return 0.0
+    return clamp01((volume - v["floor"]) / max(1.0, v["full_credit"] - v["floor"]))
+
+
+def score_iv_rank(rank: Optional[float], cfg: Dict[str, Any]) -> float:
+    """rank = percentile (0..1) of today's ATM IV vs trailing history.
+    None (insufficient history) scores neutral 0.5."""
+    if rank is None:
+        return 0.5
+    return 1.0 - rank if cfg["iv_rank"].get("prefer_low", True) else rank
+
+
+def score_dte_fit(dte: Optional[float], cfg: Dict[str, Any]) -> float:
+    band = cfg["dte_band"]
+    return band_score(dte, band["min"], band["max"], band["falloff_days"])
+
+
+def score_trend_alignment(trend01: Optional[float], regime01: Optional[float],
+                          cfg: Dict[str, Any]) -> float:
+    t = cfg["trend_alignment"]
+    tw, rw = float(t["trend_weight"]), float(t["regime_weight"])
+    if tw + rw <= 0:
+        return 0.5
+    trend01 = 0.5 if trend01 is None else trend01
+    regime01 = 0.5 if regime01 is None else regime01
+    return clamp01((trend01 * tw + regime01 * rw) / (tw + rw))
+
+
+def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    f = cfg["filters"]
+    mid = contract.get("mid")
+    if mid is None or mid < f["min_mid"]:
+        return False, "no quote or mid below min_mid"
+    if (contract.get("bid") or 0) <= 0 or (contract.get("ask") or 0) <= 0:
+        return False, "missing bid/ask"
+    if f.get("require_greeks", True) and contract.get("delta") is None:
+        return False, "missing greeks"
+    if (contract.get("open_interest") or 0) < f["min_open_interest"]:
+        return False, "open interest below minimum"
+    if (contract.get("volume") or 0) < f["min_volume"]:
+        return False, "volume below minimum"
+    spr = spread_pct(contract)
+    if spr is None or spr > f["max_spread_pct"]:
+        return False, "spread too wide"
+    return True, None
+
+
+def compute_contract_score(contract: Dict[str, Any], ctx: Dict[str, Any],
+                           cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Score one contract against config weights.
+
+    ctx: {spot, trend01, regime01, iv_rank} - iv_rank may be None.
+    Returns {"total": 0-100, "components": [...]} with every component's raw
+    value, 0..1 score, normalized weight, contribution, and optional note.
+    """
+    weights = cfg["weights"]
+    wsum = sum(float(w) for w in weights.values())
+    side = cfg.get("side", "call")
+
+    ext = extrinsic_pct(contract.get("mid"), contract.get("strike"), ctx.get("spot"), side)
+    spr = spread_pct(contract)
+    iv_rank = ctx.get("iv_rank")
+    trend01, regime01 = ctx.get("trend01"), ctx.get("regime01")
+    alignment = score_trend_alignment(trend01, regime01, cfg)
+
+    rows = [
+        ("delta_fit", contract.get("delta"),
+         score_delta_fit(contract.get("delta"), cfg), None),
+        ("extrinsic", ext, score_extrinsic(ext, cfg),
+         "extrinsic premium / mid"),
+        ("spread", spr, score_spread(spr, cfg),
+         "(ask - bid) / mid"),
+        ("open_interest", contract.get("open_interest"),
+         score_open_interest(contract.get("open_interest"), cfg), None),
+        ("volume", contract.get("volume"),
+         score_volume(contract.get("volume"), cfg), None),
+        ("iv_rank", iv_rank, score_iv_rank(iv_rank, cfg),
+         None if iv_rank is not None else "insufficient IV history - neutral 0.5 applied"),
+        ("dte_fit", contract.get("dte"),
+         score_dte_fit(contract.get("dte"), cfg), None),
+        ("trend_alignment", alignment, alignment,
+         f"underlying trend {trend01 if trend01 is not None else 'n/a'} "
+         f"blended with regime {regime01 if regime01 is not None else 'n/a'}"),
+    ]
+
+    components = []
+    total = 0.0
+    for name, raw, score, note in rows:
+        weight = float(weights[name]) / wsum
+        contribution = score * weight
+        total += contribution
+        components.append({
+            "name": name,
+            "raw": round(raw, 4) if isinstance(raw, (int, float)) else raw,
+            "score": round(score, 4),
+            "weight": round(weight, 4),
+            "contribution": round(contribution, 4),
+            "note": note,
+        })
+    return {"total": round(total * 100.0, 1), "components": components}
+
+
+# --------------------------------------------------------------- scanner
+
+class Scanner:
+    def __init__(self, fmp, alpaca, regime_engine, config, cache):
+        self.fmp = fmp
+        self.alpaca = alpaca
+        self.regime = regime_engine
+        self.config = config
+        self.cache = cache
+
+    def _iv_rank(self, symbol: str, chain_rows: List[Dict[str, Any]], spot: float,
+                 cfg: Dict[str, Any]) -> Optional[float]:
+        """Persist today's ATM IV for `symbol` and return the current
+        percentile vs the trailing 90 days. None until enough history."""
+        band = cfg["dte_band"]
+        candidates = [
+            c for c in chain_rows
+            if c.get("iv") and c.get("dte") is not None
+            and band["min"] <= c["dte"] <= band["max"]
+        ]
+        atm_iv = None
+        if candidates:
+            atm = min(candidates, key=lambda c: abs(c["strike"] - spot))
+            atm_iv = float(atm["iv"])
+        today_et = dt.datetime.now(ET).date().isoformat()
+        if atm_iv:
+            try:
+                db.execute(
+                    "INSERT INTO iv_history (symbol, date, atm_iv) VALUES (?, ?, ?) "
+                    "ON CONFLICT(symbol, date) DO UPDATE SET atm_iv = excluded.atm_iv",
+                    (symbol, today_et, atm_iv),
+                )
+            except Exception:
+                log.exception("failed to persist ATM IV for %s", symbol)
+        min_days = int(cfg["iv_rank"].get("min_history_days", 10))
+        rows = db.query(
+            "SELECT atm_iv FROM iv_history WHERE symbol = ? "
+            "AND date >= date('now', '-90 day') ORDER BY date",
+            (symbol,),
+        )
+        if atm_iv is None or len(rows) < min_days:
+            return None
+        values = [r["atm_iv"] for r in rows]
+        below = sum(1 for v in values if v <= atm_iv)
+        return round(below / len(values), 3)
+
+    async def _scan_ticker(self, symbol: str, regime01: float, cfg: Dict[str, Any],
+                           sem: asyncio.Semaphore) -> Dict[str, Any]:
+        async with sem:
+            try:
+                snap = await self.alpaca.stock_snapshot(symbol)
+                spot = snap.data.get("price")
+                stale = snap.stale
+                if not spot:
+                    return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
+                            "stale": stale, "error": "no spot price"}
+
+                trend01 = None
+                try:
+                    bars = await self.alpaca.bars(symbol, 120)
+                    trend01 = trend_structure([r["close"] for r in bars.data])["score"]
+                    stale = stale or bars.stale
+                except ProviderError as exc:
+                    log.warning("trend unavailable for %s: %s", symbol, exc)
+
+                today = dt.date.today()
+                band = cfg["dte_band"]
+                pad = int(band["falloff_days"])
+                window = cfg["chain_window"]
+                chain = await self.alpaca.chain(
+                    symbol,
+                    cfg.get("side", "call"),
+                    exp_gte=(today + dt.timedelta(days=max(0, int(band["min"]) - pad))).isoformat(),
+                    exp_lte=(today + dt.timedelta(days=int(band["max"]) + pad)).isoformat(),
+                    strike_gte=spot * (1.0 - float(window["strike_itm_pct"])),
+                    strike_lte=spot * (1.0 + float(window["strike_otm_pct"])),
+                )
+                stale = stale or chain.stale
+
+                iv_rank = self._iv_rank(symbol, chain.data, spot, cfg)
+                ctx = {"spot": spot, "trend01": trend01, "regime01": regime01,
+                       "iv_rank": iv_rank}
+
+                rows = []
+                dropped: Dict[str, int] = {}
+                for contract in chain.data:
+                    ok, reason = passes_filters(contract, cfg)
+                    if not ok:
+                        dropped[reason] = dropped.get(reason, 0) + 1
+                        continue
+                    scored = compute_contract_score(contract, ctx, cfg)
+                    row = dict(contract)
+                    row["spot"] = spot
+                    row["spread_pct"] = round(spread_pct(contract) or 0.0, 4)
+                    row["trend01"] = trend01
+                    row["iv_rank"] = iv_rank
+                    row["score"] = scored["total"]
+                    row["components"] = scored["components"]
+                    rows.append(row)
+                return {"symbol": symbol, "rows": rows, "scanned": len(chain.data),
+                        "dropped": dropped, "stale": stale, "error": None}
+            except ProviderError as exc:
+                return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
+                        "stale": False, "error": str(exc)}
+
+    async def _scan_now(self) -> Dict[str, Any]:
+        cfg = self.config.get("scoring")
+        universe = self.config.get("universe")["tickers"]
+        settings = self.config.get("settings")
+        regime = await self.regime.compute()
+        regime01 = regime["score"] / 100.0
+
+        sem = asyncio.Semaphore(int(settings["scan"].get("concurrency", 3)))
+        per_ticker = await asyncio.gather(
+            *[self._scan_ticker(sym, regime01, cfg, sem) for sym in universe]
+        )
+
+        rows = [row for result in per_ticker for row in result["rows"]]
+        rows.sort(key=lambda r: r["score"], reverse=True)
+        dropped: Dict[str, int] = {}
+        for result in per_ticker:
+            for reason, count in result["dropped"].items():
+                dropped[reason] = dropped.get(reason, 0) + count
+
+        return {
+            "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
+            "regime": {"label": regime["label"], "score": regime["score"]},
+            "universe_size": len(universe),
+            "contracts_scanned": sum(r["scanned"] for r in per_ticker),
+            "contracts_kept": len(rows),
+            "dropped": dropped,
+            "results": rows[: int(cfg.get("top_n", 15))],
+            "degraded": [
+                {"symbol": r["symbol"], "error": r["error"]}
+                for r in per_ticker if r["error"]
+            ],
+            "stale": any(r["stale"] for r in per_ticker) or bool(regime.get("stale")),
+        }
+
+    async def scan(self, refresh: bool = False) -> Dict[str, Any]:
+        ttl = self.config.get("settings")["cache_ttls_seconds"]["scan"]
+        if refresh:
+            result = await self._scan_now()
+            self.cache.set("scan:result", result, ttl)
+            return result
+        fetched = await self.cache.get_or_fetch("scan:result", ttl, self._scan_now)
+        result = dict(fetched.data)
+        if fetched.stale:
+            result["stale"] = True
+        return result
+
+    def find_cached(self, occ_symbol: str) -> Optional[Dict[str, Any]]:
+        """Most recent scored row for a contract from the cached scan, any
+        freshness. Used to journal the score snapshot at order time."""
+        result = self.cache.peek("scan:result")
+        if not result:
+            return None
+        for row in result.get("results", []):
+            if row.get("occ_symbol") == occ_symbol:
+                return row
+        return None

@@ -40,6 +40,20 @@ async def regime_history(limit: int = Query(30, ge=1, le=365)):
     return get_deps().regime.history(limit)
 
 
+@router.get("/recommendations")
+async def recommendations(refresh: bool = Query(False)) -> Dict[str, Any]:
+    return await get_deps().scanner.scan(refresh=refresh)
+
+
+@router.get("/universe")
+async def universe() -> Dict[str, Any]:
+    deps = get_deps()
+    return {
+        "tickers": deps.config.get("universe")["tickers"],
+        "scoring": deps.config.get("scoring"),
+    }
+
+
 @router.get("/watchlist")
 async def watchlist() -> Dict[str, Any]:
     deps = get_deps()
