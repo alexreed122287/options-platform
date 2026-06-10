@@ -35,6 +35,38 @@ The smoke test prints SPY quote, an SPY call chain with greeks, an FMP
 profile, account info, cache stats, and remaining rate budgets. Providers
 without keys are skipped gracefully.
 
+## Live demo (no keys, no setup)
+
+The dashboard is phone-friendly and ships with a built-in demo mode: opened
+from GitHub Pages (or any URL with `?demo=1`) it runs entirely in the
+browser on realistic sample data. Order submission is disabled in the demo.
+Once Pages is enabled for this repo the demo lives at:
+
+https://alexreed122287.github.io/options-platform/
+
+## Use it from your iPhone (same Wi-Fi as the server)
+
+1. Add a long random `DASHBOARD_TOKEN` to `.env` - with the server exposed
+   on your network, the API (including order endpoints) must not be open.
+2. Start the server bound to all interfaces:
+
+```
+cd ~/options-platform
+HOST=0.0.0.0 .venv/bin/python run.py
+```
+
+3. Find your Mac's address:
+
+```
+ipconfig getifaddr en0
+```
+
+4. On the phone open `http://YOUR_MAC_IP:8787/?key=YOUR_DASHBOARD_TOKEN`.
+   The token is remembered after the first load. Add to Home Screen in
+   Safari for an app-like full-screen experience.
+
+The UI confirmation gates apply from the phone exactly as on desktop.
+
 ## .env configuration
 
 | Variable | Default | Purpose |
@@ -51,6 +83,8 @@ without keys are skipped gracefully.
 | `ALPACA_DATA_FEED` | `iex` | Stock data feed; `sip` if your plan includes it |
 | `ALPACA_OPTIONS_FEED` | `indicative` | Options feed; `opra` if your plan includes it |
 | `FMP_BASE_URL` | financialmodelingprep.com | Override for testing |
+| `HOST` | `127.0.0.1` | Bind address; `0.0.0.0` to reach it from your phone on LAN |
+| `DASHBOARD_TOKEN` | (none) | Shared secret required on every request when set - use with `HOST=0.0.0.0` |
 | `PORT` | `8787` | Server port |
 | `DB_PATH` | `options_platform.db` | SQLite location |
 
@@ -159,6 +193,16 @@ A background loop (interval, threshold, and market-hours gating in
 alert per contract per day when a score crosses the threshold. Alerts appear
 as dashboard toasts and in the Alerts panel, and persist to the `alerts`
 table. The loop only notifies - it cannot submit orders.
+
+## Sharing this repo
+
+- **Send the demo link** (above) - works on any phone, sample data only.
+- **Share the code**: others clone the repo, create their own `.env` with
+  their own keys, and run locally. Secrets and the SQLite journal are
+  gitignored - they are never part of the repo.
+- **Private repo + specific people**: `gh api -X PUT
+  repos/alexreed122287/options-platform/collaborators/THEIR_USERNAME`
+- The GitHub Pages demo requires the repo to be public on a free plan.
 
 ## Testing
 

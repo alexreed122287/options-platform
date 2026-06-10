@@ -2,15 +2,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from api.deps import get_deps
 from api.routes_market import router as market_router
 from api.routes_trading import router as trading_router
-from data.env import ROOT
+from data.env import ROOT, env
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 log = logging.getLogger("api.app")
 
@@ -37,6 +37,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Options Platform", version=APP_VERSION, lifespan=lifespan)
 app.include_router(market_router, prefix="/api")
 app.include_router(trading_router, prefix="/api")
+
+
+@app.middleware("http")
+async def dashboard_token_gate(request: Request, call_next):
+    """Optional shared-secret gate for every route. Set DASHBOARD_TOKEN in
+    .env whenever the server is bound beyond localhost (HOST=0.0.0.0), so the
+    API - including the order endpoints - is not open to the whole network.
+    First page load uses /?key=TOKEN; the dashboard then sends the header."""
+    token = env("DASHBOARD_TOKEN")
+    if token:
+        provided = (
+            request.headers.get("x-dashboard-token")
+            or request.query_params.get("key")
+        )
+        if provided != token:
+            return JSONResponse(
+                {"detail": "unauthorized - open /?key=YOUR_DASHBOARD_TOKEN"},
+                status_code=401,
+            )
+    return await call_next(request)
 
 
 @app.get("/")

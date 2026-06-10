@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Options Platform</title>
 <style>
   :root {
@@ -99,7 +102,10 @@
   .grid { display: grid; gap: 14px; }
   .grid.cols2 { grid-template-columns: 1fr 1fr; }
   .grid.cols3 { grid-template-columns: repeat(3, 1fr); }
-  @media (max-width: 900px) { .grid.cols2, .grid.cols3 { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) {
+    .grid.cols2 { grid-template-columns: 1fr; }
+    .grid.cols3 { grid-template-columns: repeat(2, 1fr); }
+  }
   .stat-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
   .stat-card .label { color: var(--muted); font-size: 12px; }
   .stat-card .value { font-size: 22px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
@@ -152,6 +158,38 @@
   .toast.err { border-color: var(--red); }
   .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
   a { color: var(--accent); }
+
+  /* data tables scroll horizontally instead of breaking the layout */
+  #recs-table, #watchlist-table, #positions-table, #journal-table, #regime-history {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+
+  /* phone layout */
+  @media (max-width: 700px) {
+    header { padding: 8px 10px; gap: 6px; }
+    .brand { font-size: 13px; letter-spacing: 0.5px; }
+    .header-right { gap: 6px; }
+    #regime-chip { display: none; }
+    nav#tabs {
+      overflow-x: auto; flex-wrap: nowrap; padding: 8px 8px 0;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    nav#tabs::-webkit-scrollbar { display: none; }
+    nav#tabs button { flex: 0 0 auto; padding: 9px 11px; font-size: 13.5px; }
+    main { padding: 10px; }
+    .panel { padding: 10px 12px; }
+    button { min-height: 38px; }
+    button.small { min-height: 30px; }
+    /* 16px inputs stop iOS Safari from zooming the page on focus */
+    input[type=text], input[type=number], textarea.notes { font-size: 16px; }
+    .regime-score { font-size: 42px; }
+    .regime-label { font-size: 17px; }
+    .modal { width: 100%; max-height: 94vh; padding: 14px 14px; }
+    .kv { grid-template-columns: 1fr; }
+    #alerts-panel { left: 8px; right: 8px; width: auto; top: 56px; }
+    .toast { max-width: calc(100vw - 40px); }
+    textarea.notes { width: 150px; }
+  }
 </style>
 </head>
 <body>
@@ -302,10 +340,31 @@ function toast(msg, isErr = false) {
   setTimeout(() => div.remove(), 6500);
 }
 
+/* Demo mode: active on GitHub Pages (no backend) or with ?demo=1.
+   Serves realistic sample data; order submission is disabled. */
+const DEMO = location.hostname.endsWith("github.io")
+  || new URLSearchParams(location.search).has("demo");
+
+/* Optional dashboard token (set DASHBOARD_TOKEN in .env when binding
+   HOST=0.0.0.0). First visit with ?key=... stores it, then it travels in a
+   header so the URL stays clean. */
+const TOKEN = (() => {
+  const params = new URLSearchParams(location.search);
+  const fromUrl = params.get("key");
+  if (fromUrl) {
+    localStorage.setItem("dash_token", fromUrl);
+    params.delete("key");
+    const rest = params.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
+  }
+  return localStorage.getItem("dash_token");
+})();
+
 async function api(path, opts = {}) {
-  const res = await fetch("/api" + path, {
-    headers: { "Content-Type": "application/json" }, ...opts,
-  });
+  if (DEMO) return demoApi(path, opts);
+  const headers = { "Content-Type": "application/json" };
+  if (TOKEN) headers["X-Dashboard-Token"] = TOKEN;
+  const res = await fetch("/api" + path, { headers, ...opts });
   if (!res.ok) {
     let detail = "HTTP " + res.status;
     try { detail = (await res.json()).detail || detail; } catch (e) { /* keep default */ }
@@ -314,14 +373,239 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+/* ------------------------------ demo data ------------------------------ */
+
+function dComp(name, raw, score, weight, note) {
+  return { name, raw, score, weight,
+           contribution: +(score * weight).toFixed(4), note: note || null };
+}
+
+function dRec(u, exp, dte, strike, delta, mid, sprPct, oi, vol, iv, ivr, spot, trend, s) {
+  const comps = [
+    dComp("delta_fit", delta, s.delta, 0.2),
+    dComp("extrinsic", s.extRaw, s.ext, 0.15, "extrinsic premium / mid"),
+    dComp("spread", sprPct, s.spr, 0.15, "(ask - bid) / mid"),
+    dComp("open_interest", oi, s.oi, 0.1),
+    dComp("volume", vol, s.vol, 0.1),
+    dComp("iv_rank", ivr, ivr === null ? 0.5 : +(1 - ivr).toFixed(3), 0.1,
+          ivr === null ? "insufficient IV history - neutral 0.5 applied" : null),
+    dComp("dte_fit", dte, s.dte, 0.1),
+    dComp("trend_alignment", s.align, s.align, 0.1,
+          `underlying trend ${trend} blended with regime 0.72`),
+  ];
+  const total = +(comps.reduce((sum, c) => sum + c.contribution, 0) * 100).toFixed(1);
+  const occ = u + exp.replaceAll("-", "").slice(2) + "C" +
+    String(Math.round(strike * 1000)).padStart(8, "0");
+  return {
+    occ_symbol: occ, underlying: u, type: "call", strike, expiration: exp, dte,
+    bid: +(mid - mid * sprPct / 2).toFixed(2), ask: +(mid + mid * sprPct / 2).toFixed(2),
+    mid, last: mid, volume: vol, open_interest: oi, iv, iv_rank: ivr,
+    delta, gamma: 0.012, theta: -0.085, vega: 0.21, spot,
+    spread_pct: sprPct, trend01: trend, score: total, components: comps,
+  };
+}
+
+const DEMO_BASE = {
+  health: {
+    version: "1.2-demo", broker: "alpaca", data_source: "alpaca", mode: "paper",
+    live_trading_enabled: false,
+    scan_loop: { enabled: true, interval_minutes: 15, threshold: 75,
+                 market_hours_only: true, running: true, runs: 12,
+                 last_run: "2026-06-10T11:15:02-04:00", last_skip: null,
+                 last_error: null, last_new_alerts: 2 },
+    providers: { fmp: { configured: true }, alpaca: { configured: true },
+                 public: { configured: false } },
+  },
+  regime: {
+    as_of: "2026-06-10T11:30:00-04:00", date: "2026-06-10",
+    score: 71.5, label: "risk-on", degraded: false, stale: false,
+    components: {
+      spy_trend: { score: 1.0, weight: 0.35, degraded: false, stale: false, note: null,
+        detail: { price: 612.4, ema10: 608.1, ema20: 602.7, ema50: 594.3,
+                  ema50_rising: true, checks_used: 4, source: "alpaca" } },
+      breadth: { score: 0.63, weight: 0.25, degraded: false, stale: false, note: null,
+        detail: { universe: "10/15 positive", sectors: "7/11 positive" } },
+      vix: { score: 0.58, weight: 0.25, degraded: false, stale: false, note: null,
+        detail: { level: 16.8, level_score: 0.82, change_pct_lookback: 4.1,
+                  direction_score: 0.295 } },
+      sector_rotation: { score: 0.71, weight: 0.15, degraded: false, stale: false, note: null,
+        detail: { offensive_avg_pct: 0.64, defensive_avg_pct: 0.22, diff_pct: 0.42 } },
+    },
+  },
+  regimeHistory: [
+    { date: "2026-06-10", score: 71.5, label: "risk-on", created_at: "2026-06-10T11:30:00-04:00" },
+    { date: "2026-06-09", score: 68.2, label: "risk-on", created_at: "2026-06-09T16:00:01-04:00" },
+    { date: "2026-06-08", score: 61.0, label: "neutral", created_at: "2026-06-08T16:00:01-04:00" },
+    { date: "2026-06-05", score: 55.4, label: "neutral", created_at: "2026-06-05T16:00:02-04:00" },
+    { date: "2026-06-04", score: 38.9, label: "risk-off", created_at: "2026-06-04T16:00:01-04:00" },
+    { date: "2026-06-03", score: 42.7, label: "neutral", created_at: "2026-06-03T16:00:01-04:00" },
+  ],
+  recs: [
+    dRec("NVDA", "2026-07-17", 37, 170, 0.72, 14.25, 0.021, 4521, 1893, 0.41, 0.35, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.071, ext: 1.0, spr: 0.987, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("MSFT", "2026-07-17", 37, 480, 0.68, 28.4, 0.018, 2310, 640, 0.24, 0.22, 502.1, 1.0,
+         { delta: 1.0, extRaw: 0.221, ext: 0.596, spr: 1.0, oi: 1.0, vol: 0.636, dte: 1.0, align: 0.888 }),
+    dRec("AAPL", "2026-07-24", 44, 210, 0.65, 19.8, 0.02, 2100, 950, 0.28, null, 224.1, 0.75,
+         { delta: 1.0, extRaw: 0.288, ext: 0.373, spr: 1.0, oi: 1.0, vol: 0.949, dte: 1.0, align: 0.738 }),
+    dRec("SPY", "2026-07-17", 37, 595, 0.71, 24.1, 0.012, 8804, 3120, 0.17, 0.41, 612.4, 1.0,
+         { delta: 1.0, extRaw: 0.278, ext: 0.407, spr: 1.0, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("META", "2026-07-24", 44, 690, 0.66, 48.2, 0.034, 980, 410, 0.36, 0.55, 731.5, 0.75,
+         { delta: 1.0, extRaw: 0.139, ext: 0.87, spr: 0.825, oi: 0.463, vol: 0.404, dte: 1.0, align: 0.738 }),
+    dRec("AMD", "2026-07-17", 37, 150, 0.61, 19.6, 0.046, 1450, 720, 0.52, 0.78, 166.2, 0.5,
+         { delta: 1.0, extRaw: 0.173, ext: 0.757, spr: 0.675, oi: 0.711, vol: 0.717, dte: 1.0, align: 0.588 }),
+  ],
+  account: { account: { status: "ACTIVE", currency: "USD", equity: 100000,
+    cash: 38250, buying_power: 76500, options_buying_power: 38250,
+    options_approved_level: 2, paper: true }, broker: "alpaca", stale: false,
+    as_of: "2026-06-10T11:30:00" },
+  positions: { broker: "alpaca", stale: false, as_of: "2026-06-10T11:30:00", positions: [
+    { symbol: "NVDA260717C00170000", asset_class: "us_option", qty: 2, side: "long",
+      avg_entry_price: 12.1, current_price: 14.25, market_value: 2850,
+      cost_basis: 2420, unrealized_pl: 430, unrealized_plpc: 17.77 },
+    { symbol: "SPY260717C00595000", asset_class: "us_option", qty: 1, side: "long",
+      avg_entry_price: 25.4, current_price: 24.1, market_value: 2410,
+      cost_basis: 2540, unrealized_pl: -130, unrealized_plpc: -5.12 },
+    { symbol: "AAPL", asset_class: "us_equity", qty: 50, side: "long",
+      avg_entry_price: 198.2, current_price: 224.1, market_value: 11205,
+      cost_basis: 9910, unrealized_pl: 1295, unrealized_plpc: 13.07 },
+  ]},
+  journal: [
+    { id: 4, created_at: "2026-06-10T10:02:11", order_id: "demo-4", occ_symbol: "NVDA260717C00170000",
+      underlying: "NVDA", side: "buy", qty: 2, limit_price: 12.1, status: "filled",
+      filled_avg_price: 12.08, regime_label: "risk-on", regime_score: 68.2, score_total: 87.3,
+      score_breakdown: null, notes: "Breakout over 180 with sector strength.",
+      closed_at: null, exit_price: null, realized_pnl: null, paper: 1, broker: "alpaca" },
+    { id: 3, created_at: "2026-06-09T13:44:50", order_id: "demo-3", occ_symbol: "SPY260717C00595000",
+      underlying: "SPY", side: "buy", qty: 1, limit_price: 25.4, status: "filled",
+      filled_avg_price: 25.4, regime_label: "risk-on", regime_score: 66.0, score_total: 81.0,
+      score_breakdown: null, notes: "", closed_at: null, exit_price: null,
+      realized_pnl: null, paper: 1, broker: "alpaca" },
+    { id: 2, created_at: "2026-06-04T11:20:33", order_id: "demo-2", occ_symbol: "AMD260619C00150000",
+      underlying: "AMD", side: "buy", qty: 3, limit_price: 9.8, status: "filled",
+      filled_avg_price: 9.75, regime_label: "risk-off", regime_score: 38.9, score_total: 64.2,
+      score_breakdown: null, notes: "Counter-regime entry - sized down.",
+      closed_at: "2026-06-06T14:05:00", exit_price: 8.1, realized_pnl: -495,
+      paper: 1, broker: "alpaca" },
+    { id: 1, created_at: "2026-05-28T09:50:12", order_id: "demo-1", occ_symbol: "MSFT260619C00470000",
+      underlying: "MSFT", side: "buy", qty: 2, limit_price: 21.0, status: "filled",
+      filled_avg_price: 20.9, regime_label: "risk-on", regime_score: 70.1, score_total: 85.6,
+      score_breakdown: null, notes: "Earnings drift play.",
+      closed_at: "2026-06-05T15:30:00", exit_price: 27.4, realized_pnl: 1300,
+      paper: 1, broker: "alpaca" },
+  ],
+  watchlist: [
+    { symbol: "COIN", added_at: "2026-06-02T09:00:00", price: 312.4, change_pct: 2.84, above_ma50: true, above_ma200: true },
+    { symbol: "PLTR", added_at: "2026-05-20T09:00:00", price: 148.9, change_pct: -1.12, above_ma50: true, above_ma200: true },
+    { symbol: "TSLA", added_at: "2026-05-12T09:00:00", price: 287.3, change_pct: 0.44, above_ma50: false, above_ma200: true },
+  ],
+  alerts: [
+    { id: 2, created_at: "2026-06-10T11:15:02", date: "2026-06-10", occ_symbol: "NVDA260717C00170000",
+      underlying: "NVDA", score: 87.3, seen: 0, payload: null },
+    { id: 1, created_at: "2026-06-10T09:47:18", date: "2026-06-10", occ_symbol: "SPY260717C00595000",
+      underlying: "SPY", score: 81.0, seen: 0, payload: null },
+  ],
+};
+
+let demoState = null;
+
+async function demoApi(path, opts = {}) {
+  if (!demoState) demoState = JSON.parse(JSON.stringify(DEMO_BASE));
+  const method = (opts.method || "GET").toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  await new Promise((r) => setTimeout(r, 120));
+  const d = demoState;
+
+  if (path.startsWith("/health")) return d.health;
+  if (path.startsWith("/regime/history")) return d.regimeHistory;
+  if (path.startsWith("/regime")) return d.regime;
+  if (path.startsWith("/recommendations")) {
+    return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
+             universe_size: 15, contracts_scanned: 412, contracts_kept: 38,
+             dropped: { "spread too wide": 12, "open interest below minimum": 9 },
+             results: d.recs, degraded: [], stale: false };
+  }
+  if (path.startsWith("/watchlist")) {
+    const symbol = decodeURIComponent(path.split("/")[2] || "").toUpperCase();
+    if (method === "POST") {
+      if (symbol && !d.watchlist.some((w) => w.symbol === symbol)) {
+        d.watchlist.unshift({ symbol, added_at: "2026-06-10T12:00:00",
+          price: null, change_pct: null, above_ma50: null, above_ma200: null });
+      }
+      return { ok: true, symbol };
+    }
+    if (method === "DELETE") {
+      d.watchlist = d.watchlist.filter((w) => w.symbol !== symbol);
+      return { ok: true };
+    }
+    return { items: d.watchlist, stale: false, error: null };
+  }
+  if (path.startsWith("/positions")) return d.positions;
+  if (path.startsWith("/account")) return d.account;
+  if (path.startsWith("/orders/preview")) {
+    const row = d.recs.find((r) => r.occ_symbol === body.occ_symbol) || d.recs[0];
+    return { occ_symbol: row.occ_symbol, underlying: row.underlying, broker: "alpaca",
+             bid: row.bid, ask: row.ask, mid: row.mid, limit_price: row.mid,
+             equity: 100000, stale_account: false, max_risk_pct_equity: 1.0,
+             max_risk_dollars: 1000, suggested_qty: Math.max(1, Math.floor(1000 / (row.mid * 100))),
+             max_contracts_per_order: 10, est_max_loss: +(row.mid * 100).toFixed(2),
+             score_snapshot: { score: row.score }, mode: "paper",
+             live_blocked_by_env: false,
+             warnings: ["DEMO MODE - the confirm button will not place a real order"] };
+  }
+  if (path.startsWith("/orders")) {
+    throw new Error("Demo mode: order submission is disabled. Run the platform locally with your own keys (paper by default) to trade.");
+  }
+  if (path.startsWith("/journal/stats")) {
+    const closed = d.journal.filter((j) => j.closed_at);
+    const wins = closed.filter((j) => (j.realized_pnl || 0) > 0);
+    const grossProfit = wins.reduce((s, j) => s + j.realized_pnl, 0);
+    const grossLoss = Math.abs(closed.filter((j) => (j.realized_pnl || 0) < 0)
+      .reduce((s, j) => s + j.realized_pnl, 0));
+    return { open: d.journal.length - closed.length, closed: closed.length,
+             win_rate: closed.length ? +(wins.length / closed.length).toFixed(3) : null,
+             profit_factor: grossLoss > 0 ? +(grossProfit / grossLoss).toFixed(2) : (wins.length ? "inf" : null),
+             gross_profit: grossProfit, gross_loss: grossLoss,
+             net_pnl: +(grossProfit - grossLoss).toFixed(2), avg_hold_days: 4.6 };
+  }
+  if (path.startsWith("/journal/")) {
+    const id = parseInt(path.split("/")[2], 10);
+    const entry = d.journal.find((j) => j.id === id);
+    if (!entry) throw new Error("journal entry not found");
+    if (path.endsWith("/close")) {
+      const basis = entry.filled_avg_price || entry.limit_price || 0;
+      entry.exit_price = body.exit_price;
+      entry.realized_pnl = +((body.exit_price - basis) * 100 * entry.qty).toFixed(2);
+      entry.closed_at = "2026-06-10T12:00:00";
+      return { ok: true, realized_pnl: entry.realized_pnl, basis_used: basis };
+    }
+    if (path.endsWith("/sync")) {
+      return { ok: true, order: { id: entry.order_id, status: entry.status,
+               filled_avg_price: entry.filled_avg_price } };
+    }
+    entry.notes = body.notes || "";
+    return { ok: true };
+  }
+  if (path.startsWith("/journal")) return { items: d.journal };
+  if (path.startsWith("/alerts/mark-seen")) {
+    d.alerts.forEach((a) => { a.seen = 1; });
+    return { ok: true };
+  }
+  if (path.startsWith("/alerts")) return { items: d.alerts };
+  throw new Error("demo mode: unknown endpoint " + path);
+}
+
 /* ------------------------------- banner -------------------------------- */
 
-const bannerState = { setup: null, stale: null, degraded: null };
+const bannerState = {
+  demo: DEMO ? "DEMO MODE - sample data, orders disabled. Clone the repo and run it locally with your own keys for live use." : null,
+  setup: null, stale: null, degraded: null,
+};
 
 function renderBanner() {
   const banner = $("#banner");
   const warn = [bannerState.stale, bannerState.degraded].filter(Boolean);
   const parts = [];
+  if (bannerState.demo) parts.push(bannerState.demo);
   if (bannerState.setup) parts.push(bannerState.setup);
   if (warn.length) parts.push("WARNING: " + warn.join(" | "));
   if (!parts.length) {
@@ -329,8 +613,8 @@ function renderBanner() {
     banner.textContent = "";
     return;
   }
-  // setup guidance (root cause) takes the calmer style; pure outage is loud
-  banner.className = bannerState.setup ? "info" : "warn";
+  // demo/setup guidance takes the calmer style; pure outage is loud
+  banner.className = (bannerState.demo || bannerState.setup) ? "info" : "warn";
   banner.textContent = parts.join("  ||  ");
 }
 function setBanner(key, message) {
