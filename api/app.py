@@ -7,9 +7,10 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from api.deps import get_deps
 from api.routes_market import router as market_router
+from api.routes_trading import router as trading_router
 from data.env import ROOT
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.4.0"
 
 log = logging.getLogger("api.app")
 
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Options Platform", version=APP_VERSION, lifespan=lifespan)
 app.include_router(market_router, prefix="/api")
+app.include_router(trading_router, prefix="/api")
 
 
 @app.get("/")

@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Options Platform</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .brand { font-weight: 700; letter-spacing: 1px; }
+  .brand .ver { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .header-right { display: flex; gap: 10px; align-items: center; }
+  .badge {
+    padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .badge.paper { color: var(--green); border-color: var(--green); }
+  .badge.live { color: #fff; background: var(--red); border-color: var(--red); }
+  .chip {
+    padding: 2px 10px; border-radius: 12px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .chip.risk-on { color: var(--green); border-color: var(--green); }
+  .chip.risk-off { color: var(--red); border-color: var(--red); }
+  .chip.neutral { color: var(--yellow); border-color: var(--yellow); }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  .count {
+    background: var(--red); color: #fff; border-radius: 10px; padding: 0 6px;
+    font-size: 11px; margin-left: 4px;
+  }
+  .hidden { display: none !important; }
+  #banner {
+    padding: 7px 18px; font-size: 13px; border-bottom: 1px solid var(--border);
+  }
+  #banner.warn { background: #3a2d12; color: #e3b341; }
+  #banner.info { background: #122a3a; color: #79c0ff; }
+  nav#tabs {
+    display: flex; gap: 4px; padding: 8px 14px 0; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  nav#tabs button {
+    border: 1px solid transparent; border-bottom: none; background: none;
+    color: var(--muted); padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 14px;
+  }
+  nav#tabs button.active {
+    background: var(--bg); color: var(--text); border-color: var(--border);
+    font-weight: 600;
+  }
+  main { padding: 18px; max-width: 1280px; margin: 0 auto; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .info { color: var(--muted); font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th.sortable { cursor: pointer; user-select: none; color: var(--accent); }
+  thead th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: var(--panel2); }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  .score-pill {
+    display: inline-block; min-width: 44px; text-align: center; padding: 1px 8px;
+    border-radius: 10px; font-weight: 700; font-family: ui-monospace, Menlo, monospace;
+  }
+  .score-hi { background: #12361f; color: var(--green); }
+  .score-mid { background: #3a2d12; color: var(--yellow); }
+  .score-lo { background: #3a1518; color: var(--red); }
+  .breakdown { background: var(--panel2); }
+  .breakdown td { padding: 10px 14px; }
+  .breakdown table { font-size: 12.5px; }
+  .bar-track { background: var(--border); height: 7px; border-radius: 4px; width: 110px; display: inline-block; vertical-align: middle; }
+  .bar-fill { background: var(--accent); height: 7px; border-radius: 4px; display: block; }
+  .grid { display: grid; gap: 14px; }
+  .grid.cols2 { grid-template-columns: 1fr 1fr; }
+  .grid.cols3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 900px) { .grid.cols2, .grid.cols3 { grid-template-columns: 1fr; } }
+  .stat-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .stat-card .label { color: var(--muted); font-size: 12px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+  .regime-score { font-size: 52px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; }
+  .regime-label { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+  .component { margin-bottom: 12px; }
+  .component .head { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .component .detail { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .note { color: var(--yellow); font-size: 12px; }
+  input[type=text], input[type=number] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  textarea.notes {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 6px; font-size: 12px; width: 200px; height: 38px;
+  }
+  /* modal */
+  #modal-root {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    width: 560px; max-width: 100%; max-height: 90vh; overflow-y: auto; padding: 18px 20px;
+  }
+  .modal h2 { margin: 0 0 4px; font-size: 17px; }
+  .modal .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 10px 0; }
+  .kv div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding: 3px 0; font-size: 13px; }
+  .kv div span:first-child { color: var(--muted); }
+  .live-warning {
+    background: #3a1518; border: 1px solid var(--red); color: #ffb3ae;
+    padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: 13px;
+  }
+  .order-result { background: var(--panel2); border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+  /* alerts panel + toasts */
+  #alerts-panel {
+    position: fixed; top: 52px; right: 14px; width: 380px; max-height: 60vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    z-index: 40; padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  .alert-item { border-bottom: 1px solid var(--border); padding: 7px 2px; font-size: 12.5px; }
+  .alert-item .when { color: var(--muted); font-size: 11px; }
+  #toasts { position: fixed; bottom: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--panel2); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; max-width: 360px; box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  .toast.err { border-color: var(--red); }
+  .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">OPTIONS PLATFORM<span class="ver" id="version"></span></div>
+  <div class="header-right">
+    <span class="chip" id="regime-chip">regime: --</span>
+    <span class="badge" id="mode-badge">--</span>
+    <button id="alerts-btn" onclick="toggleAlertsPanel()">Alerts<span class="count hidden" id="alerts-count">0</span></button>
+  </div>
+</header>
+
+<div id="banner" class="hidden"></div>
+
+<div id="alerts-panel" class="hidden">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+    <strong>Alerts</strong>
+    <button class="small" onclick="markAlertsSeen()">Mark all read</button>
+  </div>
+  <div id="alerts-list"><div class="empty">No alerts yet</div></div>
+</div>
+
+<nav id="tabs">
+  <button data-tab="regime" class="active" onclick="showTab('regime')">Market Regime</button>
+  <button data-tab="recs" onclick="showTab('recs')">Recommendations</button>
+  <button data-tab="watchlist" onclick="showTab('watchlist')">Watchlist</button>
+  <button data-tab="positions" onclick="showTab('positions')">Positions</button>
+  <button data-tab="journal" onclick="showTab('journal')">Journal</button>
+</nav>
+
+<main>
+  <!-- ============================== REGIME =============================== -->
+  <section id="tab-regime">
+    <div class="grid cols2">
+      <div class="panel" id="regime-main"><div class="empty">Loading regime...</div></div>
+      <div class="panel">
+        <h3>Components</h3>
+        <div id="regime-components"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Daily snapshots</h3>
+      <div id="regime-history"><div class="empty">Loading...</div></div>
+    </div>
+  </section>
+
+  <!-- =========================== RECOMMENDATIONS ========================= -->
+  <section id="tab-recs" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <button class="primary" id="scan-btn" onclick="loadRecs(true)">Refresh Scan</button>
+        <span class="info" id="recs-info"></span>
+      </div>
+      <div id="recs-table"><div class="empty">Loading recommendations...</div></div>
+      <div id="recs-degraded" class="note" style="margin-top:8px;"></div>
+    </div>
+  </section>
+
+  <!-- ============================== WATCHLIST ============================ -->
+  <section id="tab-watchlist" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="watch-input" placeholder="Ticker (e.g. NVDA)" maxlength="10"
+               onkeydown="if(event.key==='Enter')addWatch()">
+        <button class="primary" onclick="addWatch()">Add</button>
+      </div>
+      <div id="watchlist-table"><div class="empty">Loading watchlist...</div></div>
+    </div>
+  </section>
+
+  <!-- ============================== POSITIONS ============================ -->
+  <section id="tab-positions" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <button onclick="loadPositions()">Refresh</button>
+        <span class="info" id="positions-info"></span>
+      </div>
+      <div id="positions-table"><div class="empty">Loading positions...</div></div>
+    </div>
+  </section>
+
+  <!-- =============================== JOURNAL ============================= -->
+  <section id="tab-journal" class="hidden">
+    <div class="grid cols3" id="journal-stats"></div>
+    <div class="panel" style="margin-top:14px;">
+      <div class="toolbar">
+        <button onclick="loadJournal()">Refresh</button>
+        <span class="info">Orders are auto-logged at submit time with the regime and score snapshot.</span>
+      </div>
+      <div id="journal-table"><div class="empty">No journal entries yet</div></div>
+    </div>
+  </section>
+</main>
+
+<div id="modal-root" class="hidden"></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+
+/* ------------------------------ utilities ------------------------------ */
+
+const $ = (sel) => document.querySelector(sel);
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+function money(x, digits = 2) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return "$" + Number(x).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function num(x, digits = 2) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return Number(x).toFixed(digits);
+}
+function pct01(x, digits = 1) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return (Number(x) * 100).toFixed(digits) + "%";
+}
+function signed(x, digits = 2, suffix = "") {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  const v = Number(x);
+  const cls = v > 0 ? "pos" : v < 0 ? "neg" : "mut";
+  const sign = v > 0 ? "+" : "";
+  return `<span class="${cls}">${sign}${v.toFixed(digits)}${suffix}</span>`;
+}
+function signedMoney(x) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  const v = Number(x);
+  const cls = v > 0 ? "pos" : v < 0 ? "neg" : "mut";
+  const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+  return `<span class="${cls}">${sign}${money(Math.abs(v))}</span>`;
+}
+function scorePill(score) {
+  if (score === null || score === undefined) return "-";
+  const cls = score >= 70 ? "score-hi" : score >= 50 ? "score-mid" : "score-lo";
+  return `<span class="score-pill ${cls}">${Number(score).toFixed(1)}</span>`;
+}
+function toast(msg, isErr = false) {
+  const div = document.createElement("div");
+  div.className = "toast" + (isErr ? " err" : "");
+  div.textContent = msg;
+  $("#toasts").appendChild(div);
+  setTimeout(() => div.remove(), 6500);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch("/api" + path, {
+    headers: { "Content-Type": "application/json" }, ...opts,
+  });
+  if (!res.ok) {
+    let detail = "HTTP " + res.status;
+    try { detail = (await res.json()).detail || detail; } catch (e) { /* keep default */ }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+/* ------------------------------- banner -------------------------------- */
+
+const bannerState = { setup: null, stale: null, degraded: null };
+
+function renderBanner() {
+  const banner = $("#banner");
+  const warn = [bannerState.stale, bannerState.degraded].filter(Boolean);
+  const parts = [];
+  if (bannerState.setup) parts.push(bannerState.setup);
+  if (warn.length) parts.push("WARNING: " + warn.join(" | "));
+  if (!parts.length) {
+    banner.className = "hidden";
+    banner.textContent = "";
+    return;
+  }
+  // setup guidance (root cause) takes the calmer style; pure outage is loud
+  banner.className = bannerState.setup ? "info" : "warn";
+  banner.textContent = parts.join("  ||  ");
+}
+function setBanner(key, message) {
+  bannerState[key] = message || null;
+  renderBanner();
+}
+
+/* -------------------------------- tabs --------------------------------- */
+
+function showTab(name) {
+  document.querySelectorAll("nav#tabs button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  ["regime", "recs", "watchlist", "positions", "journal"].forEach((t) =>
+    $("#tab-" + t).classList.toggle("hidden", t !== name));
+  if (name === "positions") loadPositions();
+  if (name === "watchlist") loadWatchlist();
+  if (name === "journal") loadJournal();
+}
+
+/* ------------------------------- health -------------------------------- */
+
+async function loadHealth() {
+  try {
+    const h = await api("/health");
+    const badge = $("#mode-badge");
+    if (h.mode === "LIVE") {
+      badge.textContent = h.live_trading_enabled ? "LIVE" : "LIVE (orders blocked)";
+      badge.className = "badge live";
+    } else {
+      badge.textContent = "PAPER";
+      badge.className = "badge paper";
+    }
+    const missing = [];
+    if (!h.providers.fmp.configured) missing.push("FMP_API_KEY");
+    if (!h.providers.alpaca.configured) missing.push("ALPACA_API_KEY / ALPACA_SECRET_KEY");
+    setBanner("setup", missing.length
+      ? "Setup: add " + missing.join(" and ") + " to .env, then restart. Market data is unavailable until then."
+      : null);
+  } catch (e) {
+    setBanner("stale", "API unreachable: " + e.message);
+  }
+}
+
+/* ------------------------------- regime -------------------------------- */
+
+function regimeChipClass(label) {
+  return label === "risk-on" ? "risk-on" : label === "risk-off" ? "risk-off" : "neutral";
+}
+
+async function loadRegime() {
+  try {
+    const r = await api("/regime");
+    const chip = $("#regime-chip");
+    chip.textContent = `regime: ${r.label} ${r.score}`;
+    chip.className = "chip " + regimeChipClass(r.label);
+
+    const colors = { "risk-on": "var(--green)", "risk-off": "var(--red)", "neutral": "var(--yellow)" };
+    $("#regime-main").innerHTML = `
+      <h3>Market Regime</h3>
+      <div class="regime-score">${num(r.score, 1)}</div>
+      <div class="regime-label" style="color:${colors[r.label] || "var(--text)"}">${esc(r.label)}</div>
+      <div class="mut" style="margin-top:8px; font-size:12.5px;">as of ${esc(r.as_of)}</div>
+      ${r.degraded ? '<div class="note" style="margin-top:8px;">Some components are degraded - see notes.</div>' : ""}
+      ${r.stale ? '<div class="note">Served from stale cache.</div>' : ""}
+    `;
+
+    $("#regime-components").innerHTML = Object.entries(r.components).map(([name, c]) => {
+      const detail = Object.entries(c.detail || {})
+        .map(([k, v]) => `${esc(k)}: ${esc(typeof v === "number" ? num(v, 2) : v)}`).join(" | ");
+      return `
+        <div class="component">
+          <div class="head">
+            <span>${esc(name)} <span class="mut">(w ${num(c.weight, 2)})</span></span>
+            <span class="mono">${num(c.score, 3)}</span>
+          </div>
+          <span class="bar-track"><span class="bar-fill" style="width:${Math.round(c.score * 100)}%"></span></span>
+          <div class="detail">${detail}</div>
+          ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
+        </div>`;
+    }).join("");
+
+    const hist = await api("/regime/history?limit=30");
+    $("#regime-history").innerHTML = hist.length ? `
+      <table><thead><tr><th>Date</th><th>Score</th><th>Label</th><th>Computed</th></tr></thead>
+      <tbody>${hist.map((row) => `
+        <tr><td>${esc(row.date)}</td><td>${num(row.score, 1)}</td>
+        <td><span class="chip ${regimeChipClass(row.label)}">${esc(row.label)}</span></td>
+        <td class="mut">${esc(row.created_at)}</td></tr>`).join("")}
+      </tbody></table>` : '<div class="empty">No snapshots yet</div>';
+
+    setBanner("stale", r.stale ? "Regime served from stale cache (provider outage)" : null);
+  } catch (e) {
+    $("#regime-main").innerHTML = `<div class="note">Regime unavailable: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------------------------- recommendations -------------------------- */
+
+let recsData = null;
+let recsSort = { key: "score", dir: -1 };
+let expandedOcc = null;
+
+const REC_COLUMNS = [
+  ["underlying", "Ticker"], ["occ_symbol", "Contract"], ["expiration", "Exp"],
+  ["dte", "DTE"], ["strike", "Strike"], ["delta", "Delta"], ["mid", "Mid"],
+  ["spread_pct", "Spr%"], ["open_interest", "OI"], ["volume", "Vol"],
+  ["iv", "IV"], ["iv_rank", "IVR"], ["score", "Score"],
+];
+
+async function loadRecs(refresh = false) {
+  const btn = $("#scan-btn");
+  btn.disabled = true;
+  btn.textContent = refresh ? "Scanning..." : "Loading...";
+  try {
+    recsData = await api("/recommendations" + (refresh ? "?refresh=true" : ""));
+    renderRecs();
+  } catch (e) {
+    $("#recs-table").innerHTML = `<div class="note">Scan failed: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh Scan";
+  }
+}
+
+function sortRecs(key) {
+  recsSort = { key, dir: recsSort.key === key ? -recsSort.dir : -1 };
+  renderRecs();
+}
+
+function renderRecs() {
+  const d = recsData;
+  if (!d) return;
+  $("#recs-info").textContent =
+    `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
+    `${d.contracts_scanned} contracts scanned, ${d.contracts_kept} passed filters, top ${d.results.length} shown` +
+    (d.stale ? " | STALE" : "");
+
+  const dropped = Object.entries(d.dropped || {}).map(([k, v]) => `${v} dropped: ${k}`).join(" | ");
+  const degraded = (d.degraded || []).map((x) => `${x.symbol}: ${x.error}`).join(" | ");
+  $("#recs-degraded").textContent = [dropped, degraded].filter(Boolean).join("  ||  ");
+  setBanner("degraded", (d.degraded || []).length
+    ? `${d.degraded.length}/${d.universe_size} tickers failed to scan` : null);
+
+  if (!d.results.length) {
+    $("#recs-table").innerHTML =
+      '<div class="empty">No contracts passed filters. Check provider keys, market hours, or loosen config/scoring.json filters.</div>';
+    return;
+  }
+
+  const rows = [...d.results].sort((a, b) => {
+    const av = a[recsSort.key], bv = b[recsSort.key];
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    return (av < bv ? -1 : av > bv ? 1 : 0) * recsSort.dir;
+  });
+
+  const head = REC_COLUMNS.map(([key, label]) =>
+    `<th class="sortable" onclick="sortRecs('${key}')">${label}${
+      recsSort.key === key ? (recsSort.dir === -1 ? " v" : " ^") : ""}</th>`
+  ).join("") + "<th></th>";
+
+  const body = rows.map((r) => {
+    const main = `
+      <tr class="clickable" onclick="toggleBreakdown('${esc(r.occ_symbol)}')">
+        <td><strong>${esc(r.underlying)}</strong></td>
+        <td class="mono">${esc(r.occ_symbol)}</td>
+        <td>${esc(r.expiration)}</td>
+        <td>${r.dte}</td>
+        <td>${num(r.strike, 1)}</td>
+        <td>${num(r.delta, 2)}</td>
+        <td>${money(r.mid)}</td>
+        <td>${pct01(r.spread_pct)}</td>
+        <td>${r.open_interest}</td>
+        <td>${r.volume}</td>
+        <td>${r.iv === null || r.iv === undefined ? "-" : num(r.iv, 2)}</td>
+        <td>${r.iv_rank === null || r.iv_rank === undefined ? "-" : num(r.iv_rank, 2)}</td>
+        <td>${scorePill(r.score)}</td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(r.occ_symbol)}')">Review Order</button></td>
+      </tr>`;
+    const expanded = expandedOcc === r.occ_symbol ? `
+      <tr class="breakdown"><td colspan="14">${breakdownTable(r)}</td></tr>` : "";
+    return main + expanded;
+  }).join("");
+
+  $("#recs-table").innerHTML =
+    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function breakdownTable(r) {
+  const comps = r.components || [];
+  return `
+    <div style="margin-bottom:6px;"><strong>${esc(r.occ_symbol)}</strong>
+      <span class="mut">spot ${money(r.spot)} | trend ${r.trend01 === null ? "n/a" : num(r.trend01, 2)} | total</span>
+      ${scorePill(r.score)}</div>
+    <table>
+      <thead><tr><th>Component</th><th>Raw</th><th>Score</th><th>Weight</th><th>Contribution</th><th style="text-align:left">Note</th></tr></thead>
+      <tbody>${comps.map((c) => `
+        <tr>
+          <td>${esc(c.name)}</td>
+          <td>${c.raw === null || c.raw === undefined ? "-" : (typeof c.raw === "number" ? num(c.raw, 4) : esc(c.raw))}</td>
+          <td><span class="bar-track" style="width:70px"><span class="bar-fill" style="width:${Math.round(c.score * 100)}%"></span></span>
+              <span class="mono"> ${num(c.score, 3)}</span></td>
+          <td>${num(c.weight, 3)}</td>
+          <td class="mono">${num(c.contribution, 4)}</td>
+          <td style="text-align:left" class="mut">${esc(c.note || "")}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function toggleBreakdown(occ) {
+  expandedOcc = expandedOcc === occ ? null : occ;
+  renderRecs();
+}
+
+/* ----------------------------- order modal ----------------------------- */
+
+let modalState = null;
+
+async function openOrderModal(occ) {
+  const root = $("#modal-root");
+  root.classList.remove("hidden");
+  root.innerHTML = `<div class="modal"><h2>Review Order</h2><div class="empty">Loading preview for ${esc(occ)}...</div></div>`;
+  try {
+    const p = await api("/orders/preview", { method: "POST", body: JSON.stringify({ occ_symbol: occ }) });
+    modalState = { preview: p, row: (recsData?.results || []).find((r) => r.occ_symbol === occ) || null };
+    renderOrderModal();
+  } catch (e) {
+    root.innerHTML = `
+      <div class="modal">
+        <h2>Review Order</h2>
+        <div class="note" style="margin:12px 0;">Preview failed: ${esc(e.message)}</div>
+        <button onclick="closeModal()">Close</button>
+      </div>`;
+  }
+}
+
+function renderOrderModal() {
+  const { preview: p, row } = modalState;
+  const live = p.mode === "LIVE";
+  const qty = Math.max(p.suggested_qty, 0);
+  $("#modal-root").innerHTML = `
+    <div class="modal">
+      <h2>Review Order <span class="badge ${live ? "live" : "paper"}">${live ? "LIVE" : "PAPER"}</span></h2>
+      <div class="sub mono">${esc(p.occ_symbol)} (${esc(p.underlying || "?")}) - buy to open, day limit</div>
+
+      <div class="kv">
+        <div><span>Bid / Ask</span><span class="mono">${money(p.bid)} / ${money(p.ask)}</span></div>
+        <div><span>Mid</span><span class="mono">${money(p.mid)}</span></div>
+        <div><span>Account equity</span><span class="mono">${money(p.equity)}${p.stale_account ? " (stale)" : ""}</span></div>
+        <div><span>Risk budget (${num(p.max_risk_pct_equity, 1)}% equity)</span><span class="mono">${money(p.max_risk_dollars)}</span></div>
+        <div><span>Suggested size</span><span class="mono">${p.suggested_qty} contract(s)</span></div>
+        <div><span>Score at scan</span><span>${p.score_snapshot ? scorePill(p.score_snapshot.score) : '<span class="mut">not in last scan</span>'}</span></div>
+      </div>
+
+      ${(p.warnings || []).map((w) => `<div class="note">WARNING: ${esc(w)}</div>`).join("")}
+
+      <div class="kv" style="margin-top:14px;">
+        <div style="border:none"><span>Quantity</span>
+          <input type="number" id="ord-qty" min="1" max="${p.max_contracts_per_order}" step="1"
+                 value="${Math.max(qty, 1)}" style="width:90px" oninput="recalcMaxLoss()"></div>
+        <div style="border:none"><span>Limit price</span>
+          <input type="number" id="ord-limit" min="0.01" step="0.01"
+                 value="${p.limit_price ?? ""}" style="width:110px" oninput="recalcMaxLoss()"></div>
+      </div>
+      <div class="kv">
+        <div><span>Estimated max loss (premium at risk)</span>
+             <span class="mono" id="ord-maxloss">-</span></div>
+      </div>
+
+      ${live ? `
+        <div class="live-warning">
+          <strong>REAL MONEY.</strong> This order goes to the live Alpaca account.
+          ${p.live_blocked_by_env
+            ? "Blocked: set LIVE_TRADING_ENABLED=true in .env to allow live orders."
+            : 'Type <strong>LIVE</strong> to enable the confirm button.'}
+          ${p.live_blocked_by_env ? "" : '<div style="margin-top:8px;"><input type="text" id="live-ack" placeholder="type LIVE" oninput="recalcMaxLoss()" style="width:120px"></div>'}
+        </div>` : ""}
+
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="${live ? "danger" : "primary"}" id="confirm-btn" onclick="submitOrder()">
+          Confirm Order (${live ? "LIVE" : "paper"})
+        </button>
+      </div>
+      <div id="order-result"></div>
+    </div>`;
+  recalcMaxLoss();
+}
+
+function recalcMaxLoss() {
+  const p = modalState?.preview;
+  if (!p) return;
+  const qty = parseInt($("#ord-qty")?.value || "0", 10);
+  const limit = parseFloat($("#ord-limit")?.value || "0");
+  $("#ord-maxloss").textContent =
+    qty > 0 && limit > 0 ? money(qty * limit * 100) : "-";
+  const btn = $("#confirm-btn");
+  if (!btn) return;
+  let ok = qty >= 1 && qty <= p.max_contracts_per_order && limit > 0;
+  if (p.mode === "LIVE") {
+    if (p.live_blocked_by_env) ok = false;
+    else ok = ok && ($("#live-ack")?.value || "").trim() === "LIVE";
+  }
+  btn.disabled = !ok;
+}
+
+async function submitOrder() {
+  const p = modalState?.preview;
+  if (!p) return;
+  const qty = parseInt($("#ord-qty").value, 10);
+  const limit = parseFloat($("#ord-limit").value);
+  const body = {
+    occ_symbol: p.occ_symbol,
+    qty: qty,
+    limit_price: limit,
+    confirmed: true,
+    live_ack: $("#live-ack") ? $("#live-ack").value.trim() : null,
+  };
+  const btn = $("#confirm-btn");
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+  const resultDiv = $("#order-result");
+  try {
+    const res = await api("/orders", { method: "POST", body: JSON.stringify(body) });
+    const o = res.order;
+    resultDiv.innerHTML = `
+      <div class="order-result">
+        Submitted. Order <span class="mono">${esc(o.id || "?")}</span>
+        - status <strong id="live-status">${esc(o.status || "?")}</strong><br>
+        <span class="mut">Journaled as entry #${res.journal_id}. Status updates below.</span>
+      </div>`;
+    toast(`Order submitted: ${p.occ_symbol} x${qty} @ ${money(limit)}`);
+    pollOrderStatus(o.id, 5);
+    loadJournal();
+  } catch (e) {
+    resultDiv.innerHTML = `<div class="order-result note">Rejected: ${esc(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = "Confirm Order (" + (p.mode === "LIVE" ? "LIVE" : "paper") + ")";
+  }
+}
+
+async function pollOrderStatus(orderId, remaining) {
+  if (!orderId || remaining <= 0) return;
+  setTimeout(async () => {
+    try {
+      const res = await api("/orders/" + orderId);
+      const el = $("#live-status");
+      if (el) {
+        el.textContent = res.order.status +
+          (res.order.filled_avg_price ? ` @ ${money(parseFloat(res.order.filled_avg_price))}` : "");
+      }
+      if (["filled", "canceled", "rejected", "expired"].includes(res.order.status)) return;
+    } catch (e) { /* transient - keep polling */ }
+    pollOrderStatus(orderId, remaining - 1);
+  }, 2000);
+}
+
+function closeModal() {
+  $("#modal-root").classList.add("hidden");
+  $("#modal-root").innerHTML = "";
+  modalState = null;
+}
+
+/* ------------------------------ watchlist ------------------------------ */
+
+async function loadWatchlist() {
+  try {
+    const w = await api("/watchlist");
+    if (!w.items.length) {
+      $("#watchlist-table").innerHTML = '<div class="empty">Watchlist is empty - add a ticker above.</div>';
+      return;
+    }
+    $("#watchlist-table").innerHTML = `
+      <table>
+        <thead><tr><th>Symbol</th><th>Price</th><th>Day</th><th>vs 50dma</th><th>vs 200dma</th><th>Added</th><th></th></tr></thead>
+        <tbody>${w.items.map((it) => `
+          <tr>
+            <td><strong>${esc(it.symbol)}</strong></td>
+            <td>${money(it.price)}</td>
+            <td>${signed(it.change_pct, 2, "%")}</td>
+            <td>${it.above_ma50 === null ? "-" : it.above_ma50 ? '<span class="pos">above</span>' : '<span class="neg">below</span>'}</td>
+            <td>${it.above_ma200 === null ? "-" : it.above_ma200 ? '<span class="pos">above</span>' : '<span class="neg">below</span>'}</td>
+            <td class="mut">${esc((it.added_at || "").slice(0, 10))}</td>
+            <td><button class="small" onclick="removeWatch('${esc(it.symbol)}')">Remove</button></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      ${w.error ? `<div class="note" style="margin-top:6px;">Quotes unavailable: ${esc(w.error)}</div>` : ""}
+      ${w.stale ? '<div class="note">Quotes served from stale cache.</div>' : ""}`;
+  } catch (e) {
+    $("#watchlist-table").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function addWatch() {
+  const input = $("#watch-input");
+  const symbol = input.value.trim().toUpperCase();
+  if (!symbol) return;
+  try {
+    await api("/watchlist/" + encodeURIComponent(symbol), { method: "POST" });
+    input.value = "";
+    loadWatchlist();
+  } catch (e) { toast("Add failed: " + e.message, true); }
+}
+
+async function removeWatch(symbol) {
+  try {
+    await api("/watchlist/" + encodeURIComponent(symbol), { method: "DELETE" });
+    loadWatchlist();
+  } catch (e) { toast("Remove failed: " + e.message, true); }
+}
+
+/* ------------------------------ positions ------------------------------ */
+
+async function loadPositions() {
+  try {
+    const p = await api("/positions");
+    $("#positions-info").textContent = `as of ${p.as_of}` + (p.stale ? " | STALE" : "");
+    if (!p.positions.length) {
+      $("#positions-table").innerHTML = '<div class="empty">No open positions.</div>';
+      return;
+    }
+    const totalValue = p.positions.reduce((s, x) => s + x.market_value, 0);
+    const totalPL = p.positions.reduce((s, x) => s + x.unrealized_pl, 0);
+    $("#positions-table").innerHTML = `
+      <table>
+        <thead><tr><th>Symbol</th><th>Class</th><th>Qty</th><th>Avg Entry</th><th>Current</th>
+        <th>Mkt Value</th><th>Unrealized P&amp;L</th><th>%</th></tr></thead>
+        <tbody>
+          ${p.positions.map((x) => `
+            <tr>
+              <td class="mono"><strong>${esc(x.symbol)}</strong></td>
+              <td class="mut">${esc(x.asset_class || "")}</td>
+              <td>${x.qty}</td>
+              <td>${money(x.avg_entry_price)}</td>
+              <td>${money(x.current_price)}</td>
+              <td>${money(x.market_value)}</td>
+              <td>${signedMoney(x.unrealized_pl)}</td>
+              <td>${signed(x.unrealized_plpc, 2, "%")}</td>
+            </tr>`).join("")}
+          <tr style="font-weight:700;">
+            <td>TOTAL</td><td></td><td></td><td></td><td></td>
+            <td>${money(totalValue)}</td><td>${signedMoney(totalPL)}</td><td></td>
+          </tr>
+        </tbody>
+      </table>`;
+    if (p.stale) setBanner("stale", "Positions served from stale cache (provider outage)");
+  } catch (e) {
+    $("#positions-table").innerHTML = `<div class="note">Positions unavailable: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ------------------------------- journal ------------------------------- */
+
+async function loadJournal() {
+  try {
+    const stats = await api("/journal/stats");
+    const cards = [
+      ["Open", stats.open],
+      ["Closed", stats.closed],
+      ["Win rate", stats.win_rate === null ? "-" : pct01(stats.win_rate)],
+      ["Profit factor", stats.profit_factor === null ? "-" : stats.profit_factor],
+      ["Net P&L", money(stats.net_pnl)],
+      ["Avg hold (days)", stats.avg_hold_days ?? "-"],
+    ];
+    $("#journal-stats").innerHTML = cards.map(([label, value]) => `
+      <div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+
+    const j = await api("/journal");
+    if (!j.items.length) {
+      $("#journal-table").innerHTML =
+        '<div class="empty">No journal entries yet. Orders are logged automatically when submitted.</div>';
+      return;
+    }
+    $("#journal-table").innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>Opened</th><th>Contract</th><th>Qty</th><th>Limit</th><th>Fill</th>
+        <th>Status</th><th>Regime@entry</th><th>Score@entry</th><th style="text-align:left">Notes</th>
+        <th>Exit</th><th>Realized P&amp;L</th><th></th></tr></thead>
+        <tbody>${j.items.map((it) => `
+          <tr>
+            <td>${it.id}</td>
+            <td class="mut">${esc((it.created_at || "").replace("T", " ").slice(0, 16))}</td>
+            <td class="mono">${esc(it.occ_symbol)}${it.paper ? "" : ' <span class="badge live">LIVE</span>'}</td>
+            <td>${it.qty}</td>
+            <td>${money(it.limit_price)}</td>
+            <td>${it.filled_avg_price ? money(it.filled_avg_price) : "-"}</td>
+            <td>${esc(it.status || "-")}</td>
+            <td>${it.regime_label ? `<span class="chip ${regimeChipClass(it.regime_label)}">${esc(it.regime_label)} ${num(it.regime_score, 0)}</span>` : "-"}</td>
+            <td>${it.score_total !== null && it.score_total !== undefined ? scorePill(it.score_total) : "-"}</td>
+            <td style="text-align:left">
+              <textarea class="notes" onblur="saveNotes(${it.id}, this.value)">${esc(it.notes || "")}</textarea>
+            </td>
+            <td>${it.exit_price ? money(it.exit_price) : "-"}</td>
+            <td>${it.realized_pnl === null || it.realized_pnl === undefined ? "-" : signedMoney(it.realized_pnl)}</td>
+            <td style="white-space:nowrap">
+              ${it.order_id && !it.closed_at ? `<button class="small" onclick="syncJournal(${it.id})">Sync</button>` : ""}
+              ${!it.closed_at ? `<button class="small" onclick="closeJournal(${it.id})">Close</button>` : ""}
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    $("#journal-table").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function saveNotes(id, notes) {
+  try {
+    await api("/journal/" + id, { method: "PATCH", body: JSON.stringify({ notes }) });
+  } catch (e) { toast("Notes save failed: " + e.message, true); }
+}
+
+async function syncJournal(id) {
+  try {
+    const res = await api("/journal/" + id + "/sync", { method: "POST" });
+    toast(`Order ${res.order.status}` +
+      (res.order.filled_avg_price ? ` @ ${money(parseFloat(res.order.filled_avg_price))}` : ""));
+    loadJournal();
+  } catch (e) { toast("Sync failed: " + e.message, true); }
+}
+
+async function closeJournal(id) {
+  const raw = prompt("Exit price per contract (option premium, e.g. 6.40):");
+  if (raw === null) return;
+  const exitPrice = parseFloat(raw);
+  if (isNaN(exitPrice) || exitPrice < 0) { toast("Invalid exit price", true); return; }
+  try {
+    const res = await api("/journal/" + id + "/close", {
+      method: "POST", body: JSON.stringify({ exit_price: exitPrice }),
+    });
+    toast("Closed. Realized P&L: " + money(res.realized_pnl));
+    loadJournal();
+  } catch (e) { toast("Close failed: " + e.message, true); }
+}
+
+/* -------------------------------- alerts ------------------------------- */
+
+let alertsMaxSeenId = 0;
+let alertsInitialized = false;
+
+async function loadAlerts() {
+  try {
+    const res = await api("/alerts?limit=50");
+    const items = res.items || [];
+    const unseen = items.filter((a) => !a.seen);
+    const count = $("#alerts-count");
+    count.textContent = unseen.length;
+    count.classList.toggle("hidden", unseen.length === 0);
+
+    const maxId = items.length ? Math.max(...items.map((a) => a.id)) : 0;
+    if (alertsInitialized && maxId > alertsMaxSeenId) {
+      items.filter((a) => a.id > alertsMaxSeenId).slice(0, 3).forEach((a) =>
+        toast(`ALERT: ${a.occ_symbol} scored ${num(a.score, 1)}`));
+    }
+    alertsMaxSeenId = Math.max(alertsMaxSeenId, maxId);
+    alertsInitialized = true;
+
+    $("#alerts-list").innerHTML = items.length ? items.map((a) => `
+      <div class="alert-item">
+        <div><strong>${esc(a.underlying || "")}</strong> <span class="mono">${esc(a.occ_symbol)}</span>
+          ${scorePill(a.score)} ${a.seen ? "" : '<span class="count">new</span>'}</div>
+        <div class="when">${esc((a.created_at || "").replace("T", " ").slice(0, 16))}</div>
+      </div>`).join("") : '<div class="empty">No alerts yet</div>';
+  } catch (e) { /* alerts are non-critical; surfaced via health banner */ }
+}
+
+function toggleAlertsPanel() {
+  $("#alerts-panel").classList.toggle("hidden");
+}
+
+async function markAlertsSeen() {
+  try {
+    await api("/alerts/mark-seen", { method: "POST" });
+    loadAlerts();
+  } catch (e) { toast("Failed: " + e.message, true); }
+}
+
+/* --------------------------------- init -------------------------------- */
+
+async function init() {
+  loadHealth();
+  loadRegime();
+  loadRecs(false);
+  loadAlerts();
+  setInterval(loadHealth, 30000);
+  setInterval(loadAlerts, 60000);
+  setInterval(loadRegime, 300000);
+  setInterval(() => {
+    if (!$("#tab-positions").classList.contains("hidden")) loadPositions();
+  }, 30000);
+}
+init();
+</script>
+</body>
+</html>
