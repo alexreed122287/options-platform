@@ -103,21 +103,34 @@ class FMPClient(BaseClient):
         )
 
     async def batch_quotes(self, symbols: List[str]) -> Fetched:
-        """Quotes for many symbols in one call. Returns {symbol: quote}."""
+        """Quotes for many symbols. Tries the one-call batch endpoints first;
+        some FMP plans reject those (403), so it falls back to per-symbol
+        quotes - more requests, fully cached, same result shape."""
         joined = ",".join(symbols)
 
         async def _fetch() -> Dict[str, Dict[str, Any]]:
-            rows = await self._get_with_fallback([
-                ("/stable/batch-quote", {"symbols": joined}),
-                (f"/api/v3/quote/{joined}", None),
-            ])
             out: Dict[str, Dict[str, Any]] = {}
-            for row in rows or []:
-                norm = _norm_quote(row, row.get("symbol", ""))
-                if norm["symbol"]:
-                    out[norm["symbol"]] = norm
+            try:
+                rows = await self._get_with_fallback([
+                    ("/stable/batch-quote", {"symbols": joined}),
+                    (f"/api/v3/quote/{joined}", None),
+                ])
+                for row in rows or []:
+                    norm = _norm_quote(row, row.get("symbol", ""))
+                    if norm["symbol"]:
+                        out[norm["symbol"]] = norm
+            except ProviderError as exc:
+                log.info("batch quote endpoints unavailable (%s); "
+                         "falling back to per-symbol quotes", str(exc)[:80])
             if not out:
-                raise ProviderError("fmp: batch quote returned no rows")
+                for symbol in symbols:
+                    try:
+                        fetched = await self.quote(symbol)
+                        out[symbol] = fetched.data
+                    except ProviderError as exc:
+                        log.warning("quote unavailable for %s: %s", symbol, str(exc)[:80])
+            if not out:
+                raise ProviderError("fmp: no quotes returned for batch")
             return out
 
         return await self.cache.get_or_fetch(
