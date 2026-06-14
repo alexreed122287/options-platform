@@ -21,6 +21,7 @@ from .cache import RateBudget, TTLCache
 from .env import ROOT, env, env_bool, load_env, secret
 from .fmp_client import FMPClient
 from .public_client import PublicClient
+from .tradier_client import TradierClient
 
 
 def _key_status(name: str) -> str:
@@ -58,27 +59,33 @@ def build_clients(settings: dict):
         cache, RateBudget("public", **budgets["public"]),
         ttls, settings.get("public", {}),
     )
-    return cache, fmp, alpaca, public
+    tradier = TradierClient(cache, RateBudget("tradier", **budgets["tradier"]), ttls)
+    return cache, fmp, alpaca, public, tradier
 
 
 async def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     load_env()
     settings = _settings()
-    cache, fmp, alpaca, public = build_clients(settings)
+    cache, fmp, alpaca, public, tradier = build_clients(settings)
     failures = []
 
     section("ENVIRONMENT")
-    print(f"FMP_API_KEY:       {_key_status('FMP_API_KEY')}")
-    print(f"ALPACA_API_KEY:    {_key_status('ALPACA_API_KEY')}")
-    print(f"ALPACA_SECRET_KEY: {_key_status('ALPACA_SECRET_KEY')}")
-    print(f"PUBLIC_API_SECRET: {_key_status('PUBLIC_API_SECRET')}")
-    print(f"ALPACA_PAPER:      {env_bool('ALPACA_PAPER', True)}")
+    print(f"FMP_API_KEY:          {_key_status('FMP_API_KEY')}")
+    print(f"ALPACA_API_KEY:       {_key_status('ALPACA_API_KEY')}")
+    print(f"ALPACA_SECRET_KEY:    {_key_status('ALPACA_SECRET_KEY')}")
+    print(f"TRADIER_ACCESS_TOKEN: {_key_status('TRADIER_ACCESS_TOKEN')}")
+    print(f"PUBLIC_API_SECRET:    {_key_status('PUBLIC_API_SECRET')}")
+    print(f"ALPACA_PAPER:         {env_bool('ALPACA_PAPER', True)}")
+    print(f"TRADIER_ENV:          {env('TRADIER_ENV', 'production')}")
     print(f"LIVE_TRADING_ENABLED: {env_bool('LIVE_TRADING_ENABLED', False)}")
-    print(f"BROKER:            {env('BROKER', 'alpaca')}")
-    print(f"DATA_SOURCE:       {env('DATA_SOURCE', 'alpaca')}")
+    print(f"BROKER:               {env('BROKER', 'alpaca')}")
+    print(f"DATA_SOURCE:          {env('DATA_SOURCE', 'alpaca')}")
     if (env("BROKER", "alpaca") or "").lower() == "public":
         print("NOTE: Public has no paper environment - orders are REAL MONEY.")
+    if (env("BROKER", "alpaca") or "").lower() == "tradier" and \
+            (env("TRADIER_ENV", "production") or "").lower() != "sandbox":
+        print("NOTE: Tradier production - orders are REAL MONEY (use TRADIER_ENV=sandbox for paper).")
 
     section("FMP")
     if not fmp.configured:
@@ -181,9 +188,46 @@ async def main() -> int:
             failures.append(f"public: {exc}")
             print(f"FAILED: {exc}")
 
+    section("TRADIER")
+    if not tradier.configured:
+        print("skipped: TRADIER_ACCESS_TOKEN missing")
+    else:
+        env_label = "sandbox (paper)" if tradier.paper else "PRODUCTION (real money)"
+        try:
+            acct = await tradier.account()
+            print(f"Account [{env_label}]: equity=${acct.data['equity']:,.2f} "
+                  f"options_bp={acct.data['options_buying_power']}")
+            snap = await tradier.stock_snapshot("SPY")
+            spot = snap.data["price"]
+            print(f"SPY quote: price={spot} change={snap.data['change_pct']}%")
+            if spot:
+                today = dt.date.today()
+                exp_gte = (today + dt.timedelta(days=20)).isoformat()
+                exp_lte = (today + dt.timedelta(days=50)).isoformat()
+                exps = await tradier.option_expirations("SPY")
+                in_window = [e for e in exps.data if exp_gte <= e <= exp_lte]
+                print(f"SPY expirations in 20-50d window: {len(in_window)} of {len(exps.data)}")
+                chain = await tradier.chain(
+                    "SPY", "call", exp_gte=exp_gte, exp_lte=exp_lte,
+                    strike_gte=spot * 0.85, strike_lte=spot * 1.05,
+                )
+                quoted = [c for c in chain.data if c["mid"]]
+                with_delta = [c for c in quoted if c["delta"] is not None]
+                print(f"SPY call chain: {len(chain.data)} contracts, "
+                      f"{len(quoted)} quoted, {len(with_delta)} with greeks")
+                with_delta.sort(key=lambda c: abs(c["delta"] - 0.7))
+                for c in with_delta[:5]:
+                    iv = f"{c['iv']:.2f}" if c["iv"] is not None else "-"
+                    print(f"{c['occ_symbol']:<24}{c['strike']:>8.1f}{c['dte']:>5}"
+                          f"{c['bid']:>8.2f}{c['ask']:>8.2f}{c['delta']:>7.2f}{iv:>7}"
+                          f"{c['open_interest']:>8}{c['volume']:>6}")
+        except ProviderError as exc:
+            failures.append(f"tradier: {exc}")
+            print(f"FAILED: {exc}")
+
     section("CACHE + RATE BUDGETS")
     print(f"cache: {cache.stats()}")
-    for budget in (fmp.budget, alpaca.budget, alpaca.budget_data, public.budget):
+    for budget in (fmp.budget, alpaca.budget, alpaca.budget_data, public.budget, tradier.budget):
         s = budget.snapshot()
         print(
             f"{s['name']}: {s['remaining_minute']}/{s['limit_minute']} per-minute remaining, "

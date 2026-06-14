@@ -111,16 +111,13 @@ class FMPClient(BaseClient):
         async def _fetch() -> Dict[str, Dict[str, Any]]:
             out: Dict[str, Dict[str, Any]] = {}
             try:
-                rows = await self._get_with_fallback([
-                    ("/stable/batch-quote", {"symbols": joined}),
-                    (f"/api/v3/quote/{joined}", None),
-                ])
+                rows = await self._get("/stable/batch-quote", {"symbols": joined})
                 for row in rows or []:
                     norm = _norm_quote(row, row.get("symbol", ""))
                     if norm["symbol"]:
                         out[norm["symbol"]] = norm
             except ProviderError as exc:
-                log.info("batch quote endpoints unavailable (%s); "
+                log.info("batch quote endpoint unavailable (%s); "
                          "falling back to per-symbol quotes", str(exc)[:80])
             if not out:
                 for symbol in symbols:
@@ -168,13 +165,14 @@ class FMPClient(BaseClient):
         """Day performance per sector, normalized to [{sector, change_pct}]."""
 
         async def _fetch() -> List[Dict[str, Any]]:
-            attempts: List[Tuple[str, Optional[Dict[str, Any]]]] = [
-                ("/api/v3/sectors-performance", None),
-            ]
+            # stable snapshot (current API) first, most recent few days; the
+            # legacy /api/v3 endpoint only as a last resort for old accounts
+            attempts: List[Tuple[str, Optional[Dict[str, Any]]]] = []
             today = dt.date.today()
             for back in range(5):
                 day = (today - dt.timedelta(days=back)).isoformat()
                 attempts.append(("/stable/sector-performance-snapshot", {"date": day}))
+            attempts.append(("/api/v3/sectors-performance", None))
             rows = await self._get_with_fallback(attempts)
             out: List[Dict[str, Any]] = []
             for row in rows or []:

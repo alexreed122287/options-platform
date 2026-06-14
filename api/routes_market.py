@@ -31,6 +31,11 @@ async def health() -> Dict[str, Any]:
                 "rate_data": deps.alpaca.budget_data.snapshot(),
             },
             "public": {**deps.public.status(), "rate": deps.public.budget.snapshot()},
+            "tradier": {
+                **deps.tradier.status(),
+                "environment": deps.tradier.environment,
+                "rate": deps.tradier.budget.snapshot(),
+            },
         },
         "cache": deps.cache.stats(),
     }

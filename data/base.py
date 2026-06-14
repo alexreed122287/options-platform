@@ -13,6 +13,7 @@ log = logging.getLogger("data.http")
 
 _SECRET_ENV_NAMES = (
     "FMP_API_KEY", "ALPACA_API_KEY", "ALPACA_SECRET_KEY", "PUBLIC_API_SECRET",
+    "TRADIER_ACCESS_TOKEN",
 )
 _APIKEY_RE = re.compile(r"(apikey=)[^&\s\"']+", re.IGNORECASE)
 
@@ -71,12 +72,14 @@ class BaseClient:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         json_body: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
         budget: Optional[RateBudget] = None,
     ) -> Any:
         (budget or self.budget).record()
         try:
             resp = await self._http.request(
-                method, url, params=params, headers=headers, json=json_body
+                method, url, params=params, headers=headers,
+                json=json_body, data=data,
             )
         except httpx.HTTPError as exc:
             msg = redact(f"{self.name}: {type(exc).__name__}: {exc}")

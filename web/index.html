@@ -159,6 +159,22 @@
   .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
   a { color: var(--accent); }
 
+  /* settings */
+  .set-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .set-row:last-child { border-bottom: none; }
+  .set-label { flex: 1 1 auto; font-size: 13.5px; }
+  .set-use { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+  .set-row input, .set-row select { flex: 0 0 260px; max-width: 50%; }
+  .set-status { flex: 0 0 56px; text-align: center; font-size: 11.5px; padding: 2px 0; border-radius: 10px; border: 1px solid var(--border); }
+  .set-status.ok { color: var(--green); border-color: var(--green); }
+  .set-status.off { color: var(--muted); }
+  .set-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  @media (max-width: 700px) {
+    .set-row { flex-wrap: wrap; }
+    .set-row input, .set-row select { flex: 1 1 100%; max-width: 100%; }
+    .set-status { flex: 0 0 auto; }
+  }
+
   /* data tables scroll horizontally instead of breaking the layout */
   #recs-table, #watchlist-table, #positions-table, #journal-table, #regime-history {
     overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -220,6 +236,7 @@
   <button data-tab="watchlist" onclick="showTab('watchlist')">Watchlist</button>
   <button data-tab="positions" onclick="showTab('positions')">Positions</button>
   <button data-tab="journal" onclick="showTab('journal')">Journal</button>
+  <button data-tab="settings" onclick="showTab('settings')">Settings</button>
 </nav>
 
 <main>
@@ -283,6 +300,11 @@
       </div>
       <div id="journal-table"><div class="empty">No journal entries yet</div></div>
     </div>
+  </section>
+
+  <!-- =============================== SETTINGS ============================ -->
+  <section id="tab-settings" class="hidden">
+    <div id="settings-body"><div class="empty">Loading settings...</div></div>
   </section>
 </main>
 
@@ -627,11 +649,12 @@ function setBanner(key, message) {
 function showTab(name) {
   document.querySelectorAll("nav#tabs button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === name));
-  ["regime", "recs", "watchlist", "positions", "journal"].forEach((t) =>
+  ["regime", "recs", "watchlist", "positions", "journal", "settings"].forEach((t) =>
     $("#tab-" + t).classList.toggle("hidden", t !== name));
   if (name === "positions") loadPositions();
   if (name === "watchlist") loadWatchlist();
   if (name === "journal") loadJournal();
+  if (name === "settings") loadSettings();
 }
 
 /* ------------------------------- health -------------------------------- */
@@ -1158,6 +1181,153 @@ async function closeJournal(id) {
     toast("Closed. Realized P&L: " + money(res.realized_pnl));
     loadJournal();
   } catch (e) { toast("Close failed: " + e.message, true); }
+}
+
+/* ------------------------------- settings ------------------------------ */
+
+const SECRET_FIELDS = [
+  ["FMP_API_KEY", "FMP API key", "fundamentals, quotes, VIX, sectors"],
+  ["ALPACA_API_KEY", "Alpaca key id", "options chains + trading"],
+  ["ALPACA_SECRET_KEY", "Alpaca secret", "options chains + trading"],
+  ["TRADIER_ACCESS_TOKEN", "Tradier access token", "options chains + trading"],
+  ["PUBLIC_API_SECRET", "Public.com API secret", "trading (real money only)"],
+];
+
+async function loadSettings() {
+  const body = $("#settings-body");
+  if (DEMO) {
+    body.innerHTML = `<div class="panel"><h3>Settings</h3>
+      <div class="empty">Settings are disabled in the demo. Clone the repo and run it
+      locally to enter your own keys and choose a broker.</div></div>`;
+    return;
+  }
+  let s;
+  try { s = await api("/settings"); }
+  catch (e) { body.innerHTML = `<div class="panel"><div class="note">${esc(e.message)}</div></div>`; return; }
+
+  const realMoney = s.real_money || {};
+  const brokerOpts = (current) => s.brokers.map((b) =>
+    `<option value="${b}" ${b === current ? "selected" : ""}>${b}${realMoney[b] ? " (real money)" : b === "alpaca" ? " (paper)" : ""}</option>`).join("");
+
+  const keyRows = SECRET_FIELDS.map(([key, label, use]) => {
+    const set = s.keys[key] && s.keys[key].set;
+    return `
+      <div class="set-row">
+        <div class="set-label">${label}<div class="set-use">${use}</div></div>
+        <input type="password" id="set-${key}" placeholder="${set ? "•••••••• (set - leave blank to keep)" : "not set"}" autocomplete="off">
+        <span class="set-status ${set ? "ok" : "off"}">${set ? "set" : "missing"}</span>
+      </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    <div class="panel">
+      <h3>Provider keys</h3>
+      <div class="set-grid">${keyRows}</div>
+      <div class="set-note">Keys are written to your local .env (gitignored) and applied immediately.
+        Stored values are never shown back here. Leave a field blank to keep the current key;
+        type a new value to replace it.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Broker &amp; data source</h3>
+      <div class="set-row">
+        <div class="set-label">Broker<div class="set-use">executes orders, shows account &amp; positions</div></div>
+        <select id="set-broker">${brokerOpts(s.broker)}</select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Data source<div class="set-use">feeds the scanner (chains, greeks, spot)</div></div>
+        <select id="set-data_source">${brokerOpts(s.data_source)}</select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Alpaca mode</div>
+        <select id="set-alpaca_paper">
+          <option value="true" ${s.alpaca_paper ? "selected" : ""}>paper (safe)</option>
+          <option value="false" ${s.alpaca_paper ? "" : "selected"}>live (real money)</option>
+        </select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Tradier environment</div>
+        <select id="set-tradier_env">
+          <option value="sandbox" ${s.tradier_env === "sandbox" ? "selected" : ""}>sandbox (paper)</option>
+          <option value="production" ${s.tradier_env === "production" ? "selected" : ""}>production (real money)</option>
+        </select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Tradier account id<div class="set-use">optional - auto-discovered if blank</div></div>
+        <input type="text" id="set-tradier_account_id" placeholder="${esc(s.values.TRADIER_ACCOUNT_ID || "auto")}" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Live trading</h3>
+      <div class="set-row">
+        <div class="set-label">Allow real-money orders<div class="set-use">required (with typed LIVE) before any live order submits</div></div>
+        <select id="set-live_trading_enabled">
+          <option value="false" ${s.live_trading_enabled ? "" : "selected"}>disabled (recommended)</option>
+          <option value="true" ${s.live_trading_enabled ? "selected" : ""}>enabled</option>
+        </select>
+      </div>
+      <div class="live-warning" id="set-live-warn" style="${liveCombo(s) ? "" : "display:none"}">
+        <strong>Heads up:</strong> your selected broker is a real-money account. Orders still require
+        the typed LIVE confirmation per trade, but there is no paper safety net.
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="set-save" onclick="saveSettings()">Save settings</button>
+      <span class="info" id="set-result"></span>
+    </div>`;
+
+  // live-warning reacts to broker/env/live changes
+  ["set-broker", "set-alpaca_paper", "set-tradier_env", "set-live_trading_enabled"].forEach((id) => {
+    const el = $("#" + id);
+    if (el) el.addEventListener("change", updateLiveWarn);
+  });
+}
+
+function liveCombo(s) {
+  const broker = $("#set-broker") ? $("#set-broker").value : s.broker;
+  if (broker === "public") return true;
+  if (broker === "alpaca") return $("#set-alpaca_paper") ? $("#set-alpaca_paper").value === "false" : !s.alpaca_paper;
+  if (broker === "tradier") return $("#set-tradier_env") ? $("#set-tradier_env").value === "production" : s.tradier_env === "production";
+  return false;
+}
+
+function updateLiveWarn() {
+  const warn = $("#set-live-warn");
+  if (warn) warn.style.display = liveCombo({}) ? "" : "none";
+}
+
+async function saveSettings() {
+  const btn = $("#set-save");
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  const payload = { keys: {} };
+  SECRET_FIELDS.forEach(([key]) => {
+    const v = $("#set-" + key).value.trim();
+    if (v) payload.keys[key] = v;   // blank = keep existing
+  });
+  payload.broker = $("#set-broker").value;
+  payload.data_source = $("#set-data_source").value;
+  payload.alpaca_paper = $("#set-alpaca_paper").value === "true";
+  payload.tradier_env = $("#set-tradier_env").value;
+  payload.live_trading_enabled = $("#set-live_trading_enabled").value === "true";
+  const acct = $("#set-tradier_account_id").value.trim();
+  if (acct) payload.tradier_account_id = acct;
+  try {
+    await api("/settings", { method: "POST", body: JSON.stringify(payload) });
+    $("#set-result").textContent = "Saved and applied.";
+    toast("Settings saved");
+    loadHealth();
+    loadRegime();
+    loadRecs(false);
+    loadSettings();
+  } catch (e) {
+    $("#set-result").textContent = "Failed: " + e.message;
+    toast("Save failed: " + e.message, true);
+    btn.disabled = false;
+    btn.textContent = "Save settings";
+  }
 }
 
 /* -------------------------------- alerts ------------------------------- */

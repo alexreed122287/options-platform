@@ -58,6 +58,10 @@ class TTLCache:
         entry = self._get_entry(key)
         return entry.value if entry else None
 
+    def invalidate(self, key: str) -> None:
+        with self._lock:
+            self._entries.pop(key, None)
+
     async def get_or_fetch(
         self, key: str, ttl: float, fetch: Callable[[], Awaitable[Any]]
     ) -> Fetched:

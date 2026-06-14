@@ -347,7 +347,7 @@ async def journal_sync(journal_id: int) -> Dict[str, Any]:
     if not entry["order_id"]:
         raise HTTPException(status_code=400, detail="entry has no order id")
     deps = get_deps()
-    broker = deps.public if entry.get("broker") == "public" else deps.alpaca
+    broker = deps._clients.get(entry.get("broker"), deps.alpaca)
     try:
         order = await broker.get_order(entry["order_id"])
     except ProviderError as exc:

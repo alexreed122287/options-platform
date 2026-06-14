@@ -2,8 +2,9 @@
 
 AI-assisted options trading platform: market regime scoring, contract
 scanning and ranking, and a confirm-gated order flow on your choice of
-brokerage - Alpaca (paper or live) or Public.com - with FMP for fundamentals
-and market data.
+brokerage - Alpaca (paper or live), Tradier (sandbox or live), or Public.com
+- with FMP for fundamentals and market data. Keys and broker selection are
+editable from the dashboard's Settings tab.
 
 **Safety first:** starts in Alpaca PAPER mode. No order is ever submitted
 without an explicit confirmation step in the UI - even on paper. Live mode
@@ -34,6 +35,25 @@ Open http://127.0.0.1:8787
 The smoke test prints SPY quote, an SPY call chain with greeks, an FMP
 profile, account info, cache stats, and remaining rate budgets. Providers
 without keys are skipped gracefully.
+
+## Entering keys (Settings tab)
+
+Open the dashboard and go to **Settings** to enter or update your FMP, Alpaca,
+Tradier, and Public keys, pick the **broker** (who executes orders) and **data
+source** (who feeds the scanner), and toggle paper/live - all without editing
+files or restarting. Changes write to your local `.env` (gitignored) and apply
+immediately. Stored secret values are never shown back; a field left blank
+keeps the existing key. The Settings tab is read-only in the hosted demo.
+
+You can still set everything via `.env` directly if you prefer.
+
+## Scanning for opportunities
+
+The **Recommendations** tab (`GET /api/recommendations`) scans your universe
+and ranks every qualifying contract top-to-bottom by a 0-100 score, with an
+expandable per-contract breakdown. It needs a **data source with options
+chains** - Alpaca, Tradier, or Public - so set one of those keys first. FMP
+alone powers the regime score but not the chain scan.
 
 ## Live demo (no keys, no setup)
 
@@ -75,9 +95,12 @@ The UI confirmation gates apply from the phone exactly as on desktop.
 | `ALPACA_API_KEY` | (none) | Alpaca key id (paper keys from the Paper account view) |
 | `ALPACA_SECRET_KEY` | (none) | Alpaca secret |
 | `ALPACA_PAPER` | `true` | `true` = paper endpoint, `false` = real money endpoint |
+| `TRADIER_ACCESS_TOKEN` | (none) | Tradier token (dashboard.tradier.com -> Settings -> API Access) |
+| `TRADIER_ENV` | `production` | `sandbox` = paper (needs a sandbox token), `production` = real money |
+| `TRADIER_ACCOUNT_ID` | auto | Override Tradier account number (auto-discovered otherwise) |
 | `PUBLIC_API_SECRET` | (none) | Public.com API secret (public.com Settings -> Security -> API) |
-| `BROKER` | `alpaca` | Order execution + account: `alpaca` or `public` (Public = real money only) |
-| `DATA_SOURCE` | `alpaca` | Scanner data (chains/greeks/spot): `alpaca` or `public` |
+| `BROKER` | `alpaca` | Order execution + account: `alpaca`, `tradier`, or `public` |
+| `DATA_SOURCE` | `alpaca` | Scanner data (chains/greeks/spot): `alpaca`, `tradier`, or `public` |
 | `PUBLIC_ACCOUNT_ID` | auto | Override Public brokerage account id (auto-discovered otherwise) |
 | `LIVE_TRADING_ENABLED` | `false` | Second gate for live orders; ignored while paper |
 | `ALPACA_DATA_FEED` | `iex` | Stock data feed; `sip` if your plan includes it |
@@ -103,6 +126,8 @@ config/
 data/                   provider layer
   fmp_client.py         FMP stable endpoints with legacy /api/v3 fallback
   alpaca_client.py      trading + market data APIs, merged option chains
+  tradier_client.py     Tradier: bearer auth, sandbox/production, chains with
+                        greeks, quote-enriched positions, form-encoded orders
   public_client.py      Public.com: JWT auth from API secret, portfolio,
                         per-expiration chains with greeks, async orders
   cache.py              TTL cache (keeps stale entries for outage fallback),
@@ -136,13 +161,13 @@ silent failure. Hard failures surface as `degraded` entries with reasons.
 `BROKER` picks who holds the account and executes orders; `DATA_SOURCE`
 picks who feeds the scanner. Any combination works:
 
-| | Alpaca | Public |
-|---|---|---|
-| Paper trading | yes (default) | NO - real money only |
-| Options chain + greeks | snapshots API (`indicative` feed) | per-expiration chain API |
-| Historical bars (trend) | yes | no - FMP history fills in automatically |
-| Market clock | yes | no - ET 9:30-16:00 weekday fallback |
-| Order placement | synchronous status | asynchronous (submission != execution) |
+| | Alpaca | Tradier | Public |
+|---|---|---|---|
+| Paper trading | yes (default) | yes (`TRADIER_ENV=sandbox`) | NO - real money only |
+| Options chain + greeks | snapshots API (`indicative` feed) | chain API with ORATS greeks | per-expiration chain API |
+| Historical bars (trend) | yes | yes | no - FMP history fills in |
+| Market clock | yes | yes | no - ET window fallback |
+| Order placement | synchronous status | synchronous status | asynchronous |
 
 Notes for `DATA_SOURCE=public`: chains are fetched one expiration at a time
 (capped by `public.max_expirations_per_chain` in `config/settings.json`), and
@@ -263,6 +288,9 @@ is asynchronous - use the Journal Sync button to confirm fills.
   included. The UI confirmation step is mandatory by construction.
 - Live orders require `LIVE_TRADING_ENABLED=true` AND the typed `LIVE`
   acknowledgment per order. "Live" means Alpaca with `ALPACA_PAPER=false`,
-  or Public always - Public has no paper mode and is never treated as one.
+  Tradier with `TRADIER_ENV=production`, or Public always (no paper mode).
+- The Settings API only writes an allowlisted set of env vars, sanitizes
+  values, and never returns stored secrets - and it sits behind the same
+  `DASHBOARD_TOKEN` gate as every other route.
 - The alert loop and every other background path can read but never trade.
 - All thresholds and weights live in `config/*.json`, hot-reloaded on edit.

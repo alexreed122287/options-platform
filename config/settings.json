@@ -19,7 +19,8 @@
     "fmp": { "per_minute": 60, "per_day": 1500 },
     "alpaca_trading": { "per_minute": 180, "per_day": 100000 },
     "alpaca_data": { "per_minute": 180, "per_day": 100000 },
-    "public": { "per_minute": 60, "per_day": 5000 }
+    "public": { "per_minute": 60, "per_day": 5000 },
+    "tradier": { "per_minute": 120, "per_day": 5000 }
   },
   "public": {
     "_doc": "Public.com specifics. token_validity_minutes: JWT lifetime requested on exchange (5-1440). max_expirations_per_chain: chain fetches are per-expiration at Public, this caps requests per underlying per scan.",

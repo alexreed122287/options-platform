@@ -10,6 +10,7 @@ from data.cache import RateBudget, TTLCache
 from data.env import ROOT, env, load_env
 from data.fmp_client import FMPClient
 from data.public_client import PublicClient
+from data.tradier_client import TradierClient
 from engine.alerts import AlertLoop
 from engine.regime import RegimeEngine
 from engine.scoring import Scanner
@@ -17,6 +18,8 @@ from engine.scoring import Scanner
 log = logging.getLogger("api.deps")
 
 CONFIG_DIR = ROOT / "config"
+
+BROKERS = ("alpaca", "tradier", "public")
 
 
 class ConfigStore:
@@ -60,31 +63,50 @@ class Deps:
             ttls,
             settings.get("public", {}),
         )
-
-        # Broker = who holds the account and executes orders.
-        # Data source = who feeds the scanner (chains/greeks/spot).
-        # Public is ALWAYS real money (no paper environment exists there).
-        self.broker_name = (env("BROKER", "alpaca") or "alpaca").lower()
-        if self.broker_name not in ("alpaca", "public"):
-            log.warning("unknown BROKER=%s, falling back to alpaca", self.broker_name)
-            self.broker_name = "alpaca"
-        self.broker = self.public if self.broker_name == "public" else self.alpaca
-
-        self.data_source_name = (env("DATA_SOURCE", "alpaca") or "alpaca").lower()
-        if self.data_source_name not in ("alpaca", "public"):
-            log.warning("unknown DATA_SOURCE=%s, falling back to alpaca", self.data_source_name)
-            self.data_source_name = "alpaca"
-        self.market_data = self.public if self.data_source_name == "public" else self.alpaca
+        self.tradier = TradierClient(
+            self.cache, RateBudget("tradier", **budgets["tradier"]), ttls
+        )
+        self._clients = {
+            "alpaca": self.alpaca, "tradier": self.tradier, "public": self.public,
+        }
 
         db.init_db()
         self.regime = RegimeEngine(self.fmp, self.alpaca, self.config, self.cache)
-        self.scanner = Scanner(self.fmp, self.market_data, self.regime, self.config, self.cache)
-        self.alerts = AlertLoop(self.scanner, self.market_data, self.config)
+        # broker = who executes orders / holds the account
+        # data source = who feeds the scanner (chains/greeks/spot)
+        self.scanner = Scanner(self.fmp, self.alpaca, self.regime, self.config, self.cache)
+        self.alerts = AlertLoop(self.scanner, self.alpaca, self.config)
+        self.reconfigure()
+
+    def reconfigure(self) -> None:
+        """(Re)resolve broker and data source from env and repoint the engines.
+        Called at startup and after a Settings change so key/broker/data-source
+        updates apply live without a restart. Tradier production and Public are
+        real money; only Alpaca paper and Tradier sandbox are paper."""
+        self.broker_name = (env("BROKER", "alpaca") or "alpaca").lower()
+        if self.broker_name not in BROKERS:
+            log.warning("unknown BROKER=%s, falling back to alpaca", self.broker_name)
+            self.broker_name = "alpaca"
+        self.broker = self._clients[self.broker_name]
+
+        self.data_source_name = (env("DATA_SOURCE", "alpaca") or "alpaca").lower()
+        if self.data_source_name not in BROKERS:
+            log.warning("unknown DATA_SOURCE=%s, falling back to alpaca", self.data_source_name)
+            self.data_source_name = "alpaca"
+        self.market_data = self._clients[self.data_source_name]
+
+        # repoint the scanner/alert loop at the active data source, then drop
+        # cached scan/regime so the next read reflects the new source
+        self.scanner.market_data = self.market_data
+        self.alerts.market_data = self.market_data
+        self.cache.invalidate("scan:result")
+        self.cache.invalidate("regime:result")
 
     async def aclose(self) -> None:
         await self.fmp.aclose()
         await self.alpaca.aclose()
         await self.public.aclose()
+        await self.tradier.aclose()
 
 
 _deps: Optional[Deps] = None
