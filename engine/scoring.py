@@ -368,9 +368,24 @@ class Scanner:
                 return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                         "stale": False, "error": str(exc)}
 
-    async def _prefilter(self, universe: List[str]) -> Tuple[List[str], Dict[str, Any]]:
+    def _filtered_universe(self, sector: Optional[str], theme: Optional[str]) -> List[str]:
+        universe = self.config.get("universe")["tickers"]
+        segs = self.config.get("segments")
+        if sector:
+            sof = segs.get("sector_of", {})
+            universe = [t for t in universe if sof.get(t) == sector]
+        if theme:
+            members = set(segs.get("themes", {}).get(theme, []))
+            universe = [t for t in universe if t in members]
+        return universe
+
+    @staticmethod
+    def _seg_key(sector: Optional[str], theme: Optional[str]) -> str:
+        return f"{sector or 'all'}|{theme or 'all'}"
+
+    async def _prefilter(self, universe: List[str], seg_key: str) -> Tuple[List[str], Dict[str, Any]]:
         """Stage 1: narrow a large universe to the top candidates with cheap
-        batch quotes, before the expensive chain scan. Cached for
+        batch quotes, before the expensive chain scan. Cached per segment for
         prefilter.cache_seconds so it is not repeated every scan refresh.
         Small universes (<= max_chain_scan) or disabled prefilter pass through."""
         pcfg = self.config.get("universe").get("prefilter", {})
@@ -399,7 +414,7 @@ class Scanner:
 
         cache_s = float(pcfg.get("cache_seconds", 1800))
         try:
-            fetched = await self.cache.get_or_fetch("scan:prefilter", cache_s, _rank)
+            fetched = await self.cache.get_or_fetch(f"scan:prefilter:{seg_key}", cache_s, _rank)
             top = fetched.data
         except ProviderError as exc:
             log.warning("prefilter unavailable (%s); scanning first %d", exc, cap)
@@ -412,14 +427,27 @@ class Scanner:
         info.update({"prefiltered": True, "ranked": len(universe), "scanned": len(top)})
         return top, info
 
-    async def _scan_now(self) -> Dict[str, Any]:
+    async def _scan_now(self, sector: Optional[str] = None,
+                        theme: Optional[str] = None) -> Dict[str, Any]:
         cfg = self.config.get("scoring")
-        universe = self.config.get("universe")["tickers"]
+        universe = self._filtered_universe(sector, theme)
         settings = self.config.get("settings")
+        sector_of = self.config.get("segments").get("sector_of", {})
         regime = await self.regime.compute()
         regime01 = regime["score"] / 100.0
 
-        scan_list, prefilter_info = await self._prefilter(universe)
+        if not universe:
+            return {
+                "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
+                "regime": {"label": regime["label"], "score": regime["score"]},
+                "universe_size": 0, "segment": {"sector": sector, "theme": theme},
+                "prefilter": {"prefiltered": False}, "tickers_scanned": 0,
+                "contracts_scanned": 0, "contracts_kept": 0, "tickers_with_picks": 0,
+                "dropped": {}, "groups": [], "results": [], "degraded": [],
+                "stale": bool(regime.get("stale")),
+            }
+
+        scan_list, prefilter_info = await self._prefilter(universe, self._seg_key(sector, theme))
 
         sem = asyncio.Semaphore(int(settings["scan"].get("concurrency", 3)))
         per_ticker = await asyncio.gather(
@@ -444,6 +472,7 @@ class Scanner:
         groups = [
             {
                 "underlying": ticker,
+                "sector": sector_of.get(ticker),
                 "best_score": contracts[0]["score"],
                 "best": contracts[0],
                 "count": len(contracts),
@@ -460,6 +489,7 @@ class Scanner:
             "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
             "regime": {"label": regime["label"], "score": regime["score"]},
             "universe_size": len(universe),
+            "segment": {"sector": sector, "theme": theme},
             "prefilter": prefilter_info,
             "tickers_scanned": len(scan_list),
             "contracts_scanned": sum(r["scanned"] for r in per_ticker),
@@ -475,25 +505,30 @@ class Scanner:
             "stale": any(r["stale"] for r in per_ticker) or bool(regime.get("stale")),
         }
 
-    async def scan(self, refresh: bool = False) -> Dict[str, Any]:
+    async def scan(self, refresh: bool = False, sector: Optional[str] = None,
+                   theme: Optional[str] = None) -> Dict[str, Any]:
         ttl = self.config.get("settings")["cache_ttls_seconds"]["scan"]
+        cache_key = f"scan:result:{self._seg_key(sector, theme)}"
+
+        async def _compute() -> Dict[str, Any]:
+            return await self._scan_now(sector, theme)
+
         if refresh:
-            result = await self._scan_now()
-            self.cache.set("scan:result", result, ttl)
+            result = await _compute()
+            self.cache.set(cache_key, result, ttl)
             return result
-        fetched = await self.cache.get_or_fetch("scan:result", ttl, self._scan_now)
+        fetched = await self.cache.get_or_fetch(cache_key, ttl, _compute)
         result = dict(fetched.data)
         if fetched.stale:
             result["stale"] = True
         return result
 
     def find_cached(self, occ_symbol: str) -> Optional[Dict[str, Any]]:
-        """Most recent scored row for a contract from the cached scan, any
-        freshness. Used to journal the score snapshot at order time."""
-        result = self.cache.peek("scan:result")
-        if not result:
-            return None
-        for row in result.get("results", []):
-            if row.get("occ_symbol") == occ_symbol:
-                return row
+        """Most recent scored row for a contract across ANY cached scan
+        (default or sector/theme-filtered). Used to journal the score
+        snapshot at order time."""
+        for result in self.cache.values_with_prefix("scan:result:"):
+            for row in result.get("results", []):
+                if row.get("occ_symbol") == occ_symbol:
+                    return row
         return None

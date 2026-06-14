@@ -99,8 +99,8 @@ class Deps:
         # cached scan/regime so the next read reflects the new source
         self.scanner.market_data = self.market_data
         self.alerts.market_data = self.market_data
-        self.cache.invalidate("scan:result")
-        self.cache.invalidate("scan:prefilter")
+        self.cache.invalidate_prefix("scan:result:")
+        self.cache.invalidate_prefix("scan:prefilter:")
         self.cache.invalidate("regime:result")
 
     async def aclose(self) -> None:

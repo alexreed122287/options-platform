@@ -1,6 +1,6 @@
-"""Market-facing routes: health, regime, watchlist."""
+"""Market-facing routes: health, regime, watchlist, segments."""
 import datetime as dt
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -52,8 +52,34 @@ async def regime_history(limit: int = Query(30, ge=1, le=365)):
 
 
 @router.get("/recommendations")
-async def recommendations(refresh: bool = Query(False)) -> Dict[str, Any]:
-    return await get_deps().scanner.scan(refresh=refresh)
+async def recommendations(
+    refresh: bool = Query(False),
+    sector: Optional[str] = Query(None),
+    theme: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    deps = get_deps()
+    segs = deps.config.get("segments")
+    # validate against known segments so a typo can't silently scan nothing
+    if sector and sector not in set((segs.get("sector_of") or {}).values()):
+        raise HTTPException(status_code=400, detail=f"unknown sector: {sector}")
+    if theme and theme not in (segs.get("themes") or {}):
+        raise HTTPException(status_code=400, detail=f"unknown theme: {theme}")
+    return await deps.scanner.scan(refresh=refresh, sector=sector or None, theme=theme or None)
+
+
+@router.get("/segments")
+async def segments() -> Dict[str, Any]:
+    """Available sectors and themes (with ticker counts) for the scan filter."""
+    segs = get_deps().config.get("segments")
+    sector_of = segs.get("sector_of") or {}
+    sector_counts: Dict[str, int] = {}
+    for sec in sector_of.values():
+        sector_counts[sec] = sector_counts.get(sec, 0) + 1
+    sectors = [{"name": s, "count": n}
+               for s, n in sorted(sector_counts.items(), key=lambda kv: -kv[1])]
+    themes = [{"name": t, "count": len(members)}
+              for t, members in sorted((segs.get("themes") or {}).items())]
+    return {"sectors": sectors, "themes": themes}
 
 
 @router.get("/universe")

@@ -79,6 +79,8 @@
   .panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .toolbar .info { color: var(--muted); font-size: 12.5px; }
+  .toolbar select { max-width: 220px; }
+  .ticker-sector { color: var(--muted); font-size: 10.5px; margin-left: 13px; margin-top: 1px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
@@ -278,6 +280,13 @@
     <div class="panel">
       <div class="toolbar">
         <button class="primary" id="scan-btn" onclick="loadRecs(true)">Refresh Scan</button>
+        <select id="filter-sector" onchange="onFilterChange()" title="Segment by sector">
+          <option value="">All sectors</option>
+        </select>
+        <select id="filter-theme" onchange="onFilterChange()" title="Segment by Finviz theme">
+          <option value="">All themes</option>
+        </select>
+        <button class="small" id="filter-clear" onclick="clearFilters()" style="display:none">Clear</button>
         <span class="info" id="recs-info"></span>
       </div>
       <div class="legend">
@@ -565,6 +574,14 @@ const DEMO_BASE = {
   ],
 };
 
+const DEMO_SECTOR = { NVDA: "Technology", MSFT: "Technology", AAPL: "Technology",
+                      META: "Communication", AMD: "Technology", SPY: null };
+const DEMO_THEMES = {
+  "Artificial Intelligence": ["NVDA", "AMD", "MSFT", "META"],
+  "Semiconductors": ["NVDA", "AMD"],
+  "Mega Cap Tech": ["AAPL", "MSFT", "NVDA", "META"],
+};
+
 let demoState = null;
 
 async function demoApi(path, opts = {}) {
@@ -577,20 +594,36 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith("/health")) return d.health;
   if (path.startsWith("/regime/history")) return d.regimeHistory;
   if (path.startsWith("/regime")) return d.regime;
+  if (path.startsWith("/segments")) {
+    const counts = {};
+    Object.values(DEMO_SECTOR).forEach((s) => { if (s) counts[s] = (counts[s] || 0) + 1; });
+    return {
+      sectors: Object.entries(counts).map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+      themes: Object.entries(DEMO_THEMES).map(([name, m]) => ({ name, count: m.length })),
+    };
+  }
   if (path.startsWith("/recommendations")) {
-    // group by ticker (best contract first), like the backend does
+    const params = new URLSearchParams((path.split("?")[1]) || "");
+    const sector = params.get("sector"), theme = params.get("theme");
+    let recs = d.recs;
+    if (sector) recs = recs.filter((r) => DEMO_SECTOR[r.underlying] === sector);
+    if (theme) recs = recs.filter((r) => (DEMO_THEMES[theme] || []).includes(r.underlying));
     const map = {};
-    [...d.recs].sort((a, b) => b.score - a.score).forEach((r) => {
+    [...recs].sort((a, b) => b.score - a.score).forEach((r) => {
       (map[r.underlying] = map[r.underlying] || []).push(r);
     });
     const groups = Object.entries(map).map(([underlying, contracts]) => ({
-      underlying, best: contracts[0], best_score: contracts[0].score,
+      underlying, sector: DEMO_SECTOR[underlying] || null,
+      best: contracts[0], best_score: contracts[0].score,
       count: contracts.length, contracts,
     })).sort((a, b) => b.best_score - a.best_score);
     const results = groups.flatMap((g) => g.contracts);
+    const fullUniverse = sector || theme ? Math.max(40, results.length * 9) : 3175;
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
-             universe_size: 3175, tickers_scanned: 40,
-             prefilter: { prefiltered: true, ranked: 3175, scanned: 40 },
+             universe_size: fullUniverse, tickers_scanned: Math.min(40, groups.length || 40),
+             segment: { sector: sector || null, theme: theme || null },
+             prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
              contracts_scanned: 412, contracts_kept: results.length,
              tickers_with_picks: groups.length,
              dropped: { "spread too wide": 12, "open interest below minimum": 9 },
@@ -795,6 +828,8 @@ async function loadRegime() {
 /* ---------------------------- recommendations -------------------------- */
 
 let recsData = null;
+let recsFilter = { sector: "", theme: "" };
+let segmentsLoaded = false;
 let recsSort = { key: "score", dir: -1 };
 let expandedTicker = null;   // which ticker's option ladder is open
 let expandedOcc = null;      // which contract's score breakdown is open
@@ -808,12 +843,49 @@ const REC_COLUMNS = [
 // text columns sort A->Z first; numeric columns sort high->low first
 const TEXT_COLS = new Set(["underlying", "occ_symbol", "expiration"]);
 
+async function loadSegments() {
+  if (segmentsLoaded) return;
+  try {
+    const s = await api("/segments");
+    const secSel = $("#filter-sector");
+    (s.sectors || []).forEach((x) => {
+      const o = document.createElement("option");
+      o.value = x.name; o.textContent = `${x.name} (${x.count})`;
+      secSel.appendChild(o);
+    });
+    const themeSel = $("#filter-theme");
+    (s.themes || []).forEach((x) => {
+      const o = document.createElement("option");
+      o.value = x.name; o.textContent = `${x.name} (${x.count})`;
+      themeSel.appendChild(o);
+    });
+    segmentsLoaded = true;
+  } catch (e) { /* segments optional; filters just stay at "All" */ }
+}
+
+function onFilterChange() {
+  recsFilter = { sector: $("#filter-sector").value, theme: $("#filter-theme").value };
+  $("#filter-clear").style.display = (recsFilter.sector || recsFilter.theme) ? "" : "none";
+  expandedTicker = null; expandedOcc = null;
+  loadRecs(true);
+}
+
+function clearFilters() {
+  $("#filter-sector").value = ""; $("#filter-theme").value = "";
+  onFilterChange();
+}
+
 async function loadRecs(refresh = false) {
   const btn = $("#scan-btn");
   btn.disabled = true;
   btn.textContent = refresh ? "Scanning..." : "Loading...";
   try {
-    recsData = await api("/recommendations" + (refresh ? "?refresh=true" : ""));
+    const params = new URLSearchParams();
+    if (refresh) params.set("refresh", "true");
+    if (recsFilter.sector) params.set("sector", recsFilter.sector);
+    if (recsFilter.theme) params.set("theme", recsFilter.theme);
+    const qs = params.toString();
+    recsData = await api("/recommendations" + (qs ? "?" + qs : ""));
     renderRecs();
   } catch (e) {
     $("#recs-table").innerHTML = `<div class="note">Scan failed: ${esc(e.message)}</div>`;
@@ -852,15 +924,19 @@ function renderRecs() {
     ? `${d.degraded.length}/${d.universe_size} tickers failed to scan` : null);
 
   const groups = recGroups(d);
+  const seg = d.segment || {};
+  const segPhrase = [seg.sector, seg.theme].filter(Boolean).join(" + ");
   $("#recs-info").textContent =
     `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
+    (segPhrase ? `[${segPhrase}] ` : "") +
     `${scanPhrase}, ${d.contracts_scanned} contracts scanned, ` +
     `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, ` +
     `top ${groups.length} tickers shown` + (d.stale ? " | STALE" : "");
 
   if (!groups.length) {
+    const where = segPhrase ? ` in ${segPhrase}` : "";
     $("#recs-table").innerHTML =
-      '<div class="empty">No contracts passed filters. Check provider keys, market hours, or loosen config/scoring.json filters.</div>';
+      `<div class="empty">No contracts passed filters${where}. Try a different sector/theme, check market hours, or loosen config/scoring.json filters.</div>`;
     return;
   }
 
@@ -886,7 +962,8 @@ function renderRecs() {
     const main = `
       <tr class="clickable${open ? " open" : ""}" onclick="toggleTicker('${esc(g.underlying)}')"
           title="${g.count} contract${g.count === 1 ? "" : "s"} - click to ${open ? "collapse" : "see all ranked"}">
-        <td><span class="twist${open ? " open" : ""}"></span><strong>${esc(g.underlying)}</strong>${more}</td>
+        <td><span class="twist${open ? " open" : ""}"></span><strong>${esc(g.underlying)}</strong>${more}
+          ${g.sector ? `<div class="ticker-sector">${esc(g.sector)}</div>` : ""}</td>
         <td class="mono">${esc(r.occ_symbol)}</td>
         <td>${esc(r.expiration)}</td>
         <td>${r.dte}</td>
@@ -1509,6 +1586,7 @@ async function markAlertsSeen() {
 async function init() {
   loadHealth();
   loadRegime();
+  loadSegments();
   loadRecs(false);
   loadAlerts();
   setInterval(loadHealth, 30000);

@@ -62,6 +62,16 @@ class TTLCache:
         with self._lock:
             self._entries.pop(key, None)
 
+    def invalidate_prefix(self, prefix: str) -> None:
+        with self._lock:
+            for key in [k for k in self._entries if k.startswith(prefix)]:
+                self._entries.pop(key, None)
+
+    def values_with_prefix(self, prefix: str) -> list:
+        """All cached values whose key starts with prefix, any freshness."""
+        with self._lock:
+            return [e.value for k, e in self._entries.items() if k.startswith(prefix)]
+
     async def get_or_fetch(
         self, key: str, ttl: float, fetch: Callable[[], Awaitable[Any]]
     ) -> Fetched:

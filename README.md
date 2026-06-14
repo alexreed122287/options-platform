@@ -79,6 +79,19 @@ option ladder ranked by score (up to `scoring.max_contracts_per_ticker`), then
 click any option for its component breakdown. `scoring.top_n` is the number of
 tickers shown.
 
+### Segmenting by sector / theme
+
+`config/segments.json` maps every universe ticker to its Finviz **sector**
+(11, one per ticker) and the Finviz Elite **themes** it belongs to (~400, many
+per ticker - "AI - Compute & Acceleration", "Quantum Computing", "Nuclear",
+etc.). The Recommendations tab has a sector dropdown and a theme dropdown; the
+scan restricts the universe to the chosen segment *before* prefiltering, so you
+get the best opportunities within that slice. `GET /api/segments` lists them
+with counts; `GET /api/recommendations?sector=Technology&theme=...` scans one.
+Each result row shows its sector. Regenerate the maps from a fresh Finviz
+export by re-running the import (sector from the CSV, themes from
+`industry/master_tickers.json`).
+
 > The prefilter quotes through your **data source**, not FMP - FMP plans cap
 > quote volume and cannot price thousands of names. Use Tradier or Alpaca as
 > the data source for full-universe ranking.
