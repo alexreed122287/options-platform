@@ -1,0 +1,21 @@
+{
+  "name": "options-platform",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "postCreateCommand": "pip install -r requirements.txt",
+  "forwardPorts": [8787],
+  "portsAttributes": {
+    "8787": {
+      "label": "options-platform dashboard",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteEnv": {
+    "HOST": "0.0.0.0",
+    "PORT": "8787"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}

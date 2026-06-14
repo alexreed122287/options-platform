@@ -115,6 +115,34 @@ Once Pages is enabled for this repo the demo lives at:
 
 https://alexreed122287.github.io/options-platform/
 
+**GitHub Pages is static hosting** - it serves the HTML only, with no backend
+and no keys, so it can *only* ever show demo data. For a real, live dashboard
+you run the backend (locally, or on GitHub Codespaces below).
+
+## Run the real dashboard on GitHub Codespaces (public URL, no local machine)
+
+Codespaces runs the actual FastAPI server in the cloud and gives you a
+forwarded URL with YOUR live data - all from this repo.
+
+1. **Add your keys as Codespaces secrets** (one time): GitHub -> Settings ->
+   Codespaces -> Secrets, scoped to this repo. They are injected as env vars,
+   so no `.env` is needed. Add the ones you use:
+   `FMP_API_KEY`, `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `TRADIER_ACCESS_TOKEN`,
+   `BROKER`, `DATA_SOURCE`, and a long random `DASHBOARD_TOKEN`.
+2. On the repo: **Code -> Codespaces -> Create codespace on main**. It installs
+   dependencies automatically (`.devcontainer/`).
+3. In the Codespace terminal: `python run.py`
+4. **Ports** tab -> port 8787 -> right-click -> **Port Visibility -> Public**
+   (the `DASHBOARD_TOKEN` gate keeps it private to anyone without the token).
+5. Open the forwarded URL with your token:
+   `https://<your-codespace>-8787.app.github.dev/?key=YOUR_DASHBOARD_TOKEN`
+
+Notes: a Codespace **spins down after ~30 min idle** (restart it from the repo
+to resume) and counts against your monthly Codespaces hours. Orders stay
+double-gated (`LIVE_TRADING_ENABLED` + typed `LIVE`), so a shared link can read
+but not trade. To share the tool without any keys or exposure, use the Pages
+demo above instead.
+
 ## Use it from your iPhone (same Wi-Fi as the server)
 
 1. Add a long random `DASHBOARD_TOKEN` to `.env` - with the server exposed
