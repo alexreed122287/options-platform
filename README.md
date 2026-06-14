@@ -73,6 +73,12 @@ Tune it in `config/universe.json`: raise `max_chain_scan` for deeper coverage
 to `false` only for a small custom universe. The scan info line shows
 "N tickers prefiltered to top M" so the funnel is always visible.
 
+Results are **grouped by ticker**: each row is a ticker's single best-scoring
+contract, so one name can't flood the list. Click a ticker to expand its full
+option ladder ranked by score (up to `scoring.max_contracts_per_ticker`), then
+click any option for its component breakdown. `scoring.top_n` is the number of
+tickers shown.
+
 > The prefilter quotes through your **data source**, not FMP - FMP plans cap
 > quote volume and cannot price thousands of names. Use Tradier or Alpaca as
 > the data source for full-universe ranking.

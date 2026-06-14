@@ -2,6 +2,7 @@
   "_doc": "Contract scoring. Weights are normalized by their sum; each component scores 0..1; total = 100 * weighted average. All bands and filters live here - no magic numbers in code.",
   "side": "call",
   "top_n": 15,
+  "max_contracts_per_ticker": 20,
   "weights": {
     "delta_fit": 0.2,
     "extrinsic": 0.15,

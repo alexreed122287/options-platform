@@ -90,6 +90,16 @@
            border-left: 4px solid transparent; border-right: 4px solid transparent; }
   .caret.down { border-top: 5px solid var(--accent); }
   .caret.up { border-bottom: 5px solid var(--accent); }
+  /* row expand/collapse twist (muted, rotates open) */
+  .twist { display: inline-block; width: 0; height: 0; margin-right: 7px; vertical-align: middle;
+           border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+           border-left: 6px solid var(--muted); transition: transform .12s ease; }
+  .twist.open { transform: rotate(90deg); }
+  .more { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  tr.open > td { background: var(--panel2); }
+  .ladder > td { background: var(--panel2); padding: 4px 14px 12px; }
+  .ladder table { font-size: 12.5px; }
+  .ladder thead th { background: var(--panel2); }
   .legend { color: var(--muted); font-size: 12px; margin: 0 0 10px; line-height: 1.5; }
   thead th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
   tr.clickable { cursor: pointer; }
@@ -274,7 +284,9 @@
         <strong>Score</strong> (0-100) ranks each contract by your scoring config:
         delta fit, extrinsic %, spread tightness, open interest, volume, IV rank,
         days-to-expiry, and trend/regime alignment. Higher is a better fit.
-        Click any column heading to sort; click a row to see the full score breakdown.
+        Each row is a ticker's <strong>best</strong> contract - click it to expand
+        that ticker's full option ladder ranked, then click any option for its
+        score breakdown. Click a column heading to sort.
       </div>
       <div id="recs-table"><div class="empty">Loading recommendations...</div></div>
       <div id="recs-degraded" class="note" style="margin-top:8px;"></div>
@@ -477,14 +489,25 @@ const DEMO_BASE = {
     { date: "2026-06-03", score: 42.7, label: "neutral", created_at: "2026-06-03T16:00:01-04:00" },
   ],
   recs: [
+    // NVDA ladder - several strikes/expiries so the demo shows a full ladder
     dRec("NVDA", "2026-07-17", 37, 170, 0.72, 14.25, 0.021, 4521, 1893, 0.41, 0.35, 182.4, 1.0,
          { delta: 1.0, extRaw: 0.071, ext: 1.0, spr: 0.987, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-07-17", 37, 175, 0.66, 11.40, 0.024, 3980, 1620, 0.42, 0.36, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.21, ext: 0.62, spr: 0.96, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-08-21", 72, 170, 0.70, 18.05, 0.028, 2110, 540, 0.40, 0.33, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.34, ext: 0.30, spr: 0.93, oi: 1.0, vol: 0.55, dte: 0.6, align: 0.888 }),
+    dRec("NVDA", "2026-07-17", 37, 165, 0.78, 17.60, 0.02, 2890, 980, 0.41, 0.34, 182.4, 1.0,
+         { delta: 0.87, extRaw: 0.03, ext: 1.0, spr: 1.0, oi: 1.0, vol: 0.95, dte: 1.0, align: 0.888 }),
     dRec("MSFT", "2026-07-17", 37, 480, 0.68, 28.4, 0.018, 2310, 640, 0.24, 0.22, 502.1, 1.0,
          { delta: 1.0, extRaw: 0.221, ext: 0.596, spr: 1.0, oi: 1.0, vol: 0.636, dte: 1.0, align: 0.888 }),
+    dRec("MSFT", "2026-08-21", 72, 490, 0.63, 24.9, 0.022, 1450, 380, 0.25, 0.24, 502.1, 1.0,
+         { delta: 1.0, extRaw: 0.27, ext: 0.43, spr: 0.96, oi: 0.78, vol: 0.39, dte: 0.6, align: 0.888 }),
     dRec("AAPL", "2026-07-24", 44, 210, 0.65, 19.8, 0.02, 2100, 950, 0.28, null, 224.1, 0.75,
          { delta: 1.0, extRaw: 0.288, ext: 0.373, spr: 1.0, oi: 1.0, vol: 0.949, dte: 1.0, align: 0.738 }),
     dRec("SPY", "2026-07-17", 37, 595, 0.71, 24.1, 0.012, 8804, 3120, 0.17, 0.41, 612.4, 1.0,
          { delta: 1.0, extRaw: 0.278, ext: 0.407, spr: 1.0, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("SPY", "2026-07-17", 37, 600, 0.66, 20.6, 0.011, 12500, 4400, 0.16, 0.40, 612.4, 1.0,
+         { delta: 1.0, extRaw: 0.39, ext: 0.05, spr: 1.0, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
     dRec("META", "2026-07-24", 44, 690, 0.66, 48.2, 0.034, 980, 410, 0.36, 0.55, 731.5, 0.75,
          { delta: 1.0, extRaw: 0.139, ext: 0.87, spr: 0.825, oi: 0.463, vol: 0.404, dte: 1.0, align: 0.738 }),
     dRec("AMD", "2026-07-17", 37, 150, 0.61, 19.6, 0.046, 1450, 720, 0.52, 0.78, 166.2, 0.5,
@@ -555,12 +578,23 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith("/regime/history")) return d.regimeHistory;
   if (path.startsWith("/regime")) return d.regime;
   if (path.startsWith("/recommendations")) {
+    // group by ticker (best contract first), like the backend does
+    const map = {};
+    [...d.recs].sort((a, b) => b.score - a.score).forEach((r) => {
+      (map[r.underlying] = map[r.underlying] || []).push(r);
+    });
+    const groups = Object.entries(map).map(([underlying, contracts]) => ({
+      underlying, best: contracts[0], best_score: contracts[0].score,
+      count: contracts.length, contracts,
+    })).sort((a, b) => b.best_score - a.best_score);
+    const results = groups.flatMap((g) => g.contracts);
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
              universe_size: 3175, tickers_scanned: 40,
              prefilter: { prefiltered: true, ranked: 3175, scanned: 40 },
-             contracts_scanned: 412, contracts_kept: 38,
+             contracts_scanned: 412, contracts_kept: results.length,
+             tickers_with_picks: groups.length,
              dropped: { "spread too wide": 12, "open interest below minimum": 9 },
-             results: d.recs, degraded: [], stale: false };
+             groups, results, degraded: [], stale: false };
   }
   if (path.startsWith("/watchlist")) {
     const symbol = decodeURIComponent(path.split("/")[2] || "").toUpperCase();
@@ -762,7 +796,8 @@ async function loadRegime() {
 
 let recsData = null;
 let recsSort = { key: "score", dir: -1 };
-let expandedOcc = null;
+let expandedTicker = null;   // which ticker's option ladder is open
+let expandedOcc = null;      // which contract's score breakdown is open
 
 const REC_COLUMNS = [
   ["underlying", "Ticker"], ["occ_symbol", "Contract"], ["expiration", "Exp"],
@@ -816,14 +851,21 @@ function renderRecs() {
   setBanner("degraded", (d.degraded || []).length
     ? `${d.degraded.length}/${d.universe_size} tickers failed to scan` : null);
 
-  if (!d.results.length) {
+  const groups = recGroups(d);
+  $("#recs-info").textContent =
+    `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
+    `${scanPhrase}, ${d.contracts_scanned} contracts scanned, ` +
+    `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, ` +
+    `top ${groups.length} tickers shown` + (d.stale ? " | STALE" : "");
+
+  if (!groups.length) {
     $("#recs-table").innerHTML =
       '<div class="empty">No contracts passed filters. Check provider keys, market hours, or loosen config/scoring.json filters.</div>';
     return;
   }
 
-  const rows = [...d.results].sort((a, b) => {
-    const av = a[recsSort.key], bv = b[recsSort.key];
+  const sorted = [...groups].sort((a, b) => {
+    const av = groupSortVal(a, recsSort.key), bv = groupSortVal(b, recsSort.key);
     if (av === null || av === undefined) return 1;
     if (bv === null || bv === undefined) return -1;
     return (av < bv ? -1 : av > bv ? 1 : 0) * recsSort.dir;
@@ -836,10 +878,15 @@ function renderRecs() {
             title="Sort by ${label}">${label}${caret}</th>`;
   }).join("") + "<th></th>";
 
-  const body = rows.map((r) => {
+  // one row per ticker = its best contract; expand to the ticker's ladder
+  const body = sorted.map((g) => {
+    const r = g.best;
+    const open = expandedTicker === g.underlying;
+    const more = g.count > 1 ? `<span class="more">+${g.count - 1} more</span>` : "";
     const main = `
-      <tr class="clickable" onclick="toggleBreakdown('${esc(r.occ_symbol)}')">
-        <td><strong>${esc(r.underlying)}</strong></td>
+      <tr class="clickable${open ? " open" : ""}" onclick="toggleTicker('${esc(g.underlying)}')"
+          title="${g.count} contract${g.count === 1 ? "" : "s"} - click to ${open ? "collapse" : "see all ranked"}">
+        <td><span class="twist${open ? " open" : ""}"></span><strong>${esc(g.underlying)}</strong>${more}</td>
         <td class="mono">${esc(r.occ_symbol)}</td>
         <td>${esc(r.expiration)}</td>
         <td>${r.dte}</td>
@@ -852,15 +899,71 @@ function renderRecs() {
         <td>${r.iv === null || r.iv === undefined ? "-" : num(r.iv, 2)}</td>
         <td>${r.iv_rank === null || r.iv_rank === undefined ? "-" : num(r.iv_rank, 2)}</td>
         <td>${scorePill(r.score)}</td>
-        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(r.occ_symbol)}')">Review Order</button></td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(r.occ_symbol)}')">Review</button></td>
       </tr>`;
-    const expanded = expandedOcc === r.occ_symbol ? `
-      <tr class="breakdown"><td colspan="14">${breakdownTable(r)}</td></tr>` : "";
-    return main + expanded;
+    const expansion = open
+      ? `<tr class="ladder"><td colspan="14">${ladderTable(g)}</td></tr>` : "";
+    return main + expansion;
   }).join("");
 
   $("#recs-table").innerHTML =
     `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Normalize to groups: prefer server groups, else group flat results by ticker.
+function recGroups(d) {
+  if (d.groups && d.groups.length) return d.groups;
+  const map = {};
+  (d.results || []).forEach((r) => { (map[r.underlying] = map[r.underlying] || []).push(r); });
+  return Object.entries(map).map(([underlying, contracts]) => ({
+    underlying, best: contracts[0], best_score: contracts[0].score,
+    count: contracts.length, contracts,
+  }));
+}
+
+function groupSortVal(g, key) {
+  if (key === "underlying") return g.underlying;
+  if (key === "score") return g.best_score;
+  return g.best ? g.best[key] : null;   // other columns sort by the best contract
+}
+
+// A ticker's full option ladder, ranked; each row expands to its breakdown.
+function ladderTable(g) {
+  const shown = g.contracts.length;
+  const scope = shown < g.count ? `top ${shown} of ${g.count}` : `${g.count}`;
+  const header = `<div style="margin:2px 0 8px;"><strong>${esc(g.underlying)}</strong>
+    <span class="mut">${scope} contract${g.count === 1 ? "" : "s"} by score, best ${num(g.best_score, 1)}
+    - click any row for its score breakdown</span></div>`;
+  const cols = `<tr>
+    <th>Contract</th><th>Exp</th><th>DTE</th><th>Strike</th><th>Delta</th><th>Mid</th>
+    <th>Spr%</th><th>OI</th><th>Vol</th><th>IV</th><th>IVR</th><th>Score</th><th></th></tr>`;
+  const rows = g.contracts.map((c) => {
+    const open = expandedOcc === c.occ_symbol;
+    const r = `
+      <tr class="clickable" onclick="toggleBreakdown('${esc(c.occ_symbol)}')">
+        <td class="mono">${esc(c.occ_symbol)}</td>
+        <td>${esc(c.expiration)}</td>
+        <td>${c.dte}</td>
+        <td>${num(c.strike, 1)}</td>
+        <td>${num(c.delta, 2)}</td>
+        <td>${money(c.mid)}</td>
+        <td>${pct01(c.spread_pct)}</td>
+        <td>${c.open_interest}</td>
+        <td>${c.volume}</td>
+        <td>${c.iv === null || c.iv === undefined ? "-" : num(c.iv, 2)}</td>
+        <td>${c.iv_rank === null || c.iv_rank === undefined ? "-" : num(c.iv_rank, 2)}</td>
+        <td>${scorePill(c.score)}</td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(c.occ_symbol)}')">Review</button></td>
+      </tr>`;
+    const bd = open ? `<tr class="breakdown"><td colspan="13">${breakdownTable(c)}</td></tr>` : "";
+    return r + bd;
+  }).join("");
+  return header + `<table><thead>${cols}</thead><tbody>${rows}</tbody></table>`;
+}
+
+function toggleTicker(ticker) {
+  expandedTicker = expandedTicker === ticker ? null : ticker;
+  renderRecs();
 }
 
 function breakdownTable(r) {

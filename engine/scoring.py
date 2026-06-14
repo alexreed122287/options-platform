@@ -433,6 +433,29 @@ class Scanner:
             for reason, count in result["dropped"].items():
                 dropped[reason] = dropped.get(reason, 0) + count
 
+        # Group by underlying so the UI shows the single best contract per
+        # ticker by default, expandable to that ticker's full ranked ladder.
+        # rows are already globally score-sorted, so each ticker's list is too.
+        per_ticker_cap = int(cfg.get("max_contracts_per_ticker", 20))
+        top_tickers = int(cfg.get("top_n", 15))
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for row in rows:
+            grouped.setdefault(row["underlying"], []).append(row)
+        groups = [
+            {
+                "underlying": ticker,
+                "best_score": contracts[0]["score"],
+                "best": contracts[0],
+                "count": len(contracts),
+                "contracts": contracts[:per_ticker_cap],
+            }
+            for ticker, contracts in grouped.items()
+        ]
+        groups.sort(key=lambda g: g["best_score"], reverse=True)
+        groups = groups[:top_tickers]
+        # flat union of shown contracts - used for order-time score lookup
+        results = [c for g in groups for c in g["contracts"]]
+
         return {
             "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
             "regime": {"label": regime["label"], "score": regime["score"]},
@@ -441,8 +464,10 @@ class Scanner:
             "tickers_scanned": len(scan_list),
             "contracts_scanned": sum(r["scanned"] for r in per_ticker),
             "contracts_kept": len(rows),
+            "tickers_with_picks": len(grouped),
             "dropped": dropped,
-            "results": rows[: int(cfg.get("top_n", 15))],
+            "groups": groups,
+            "results": results,
             "degraded": [
                 {"symbol": r["symbol"], "error": r["error"]}
                 for r in per_ticker if r["error"]
