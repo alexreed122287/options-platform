@@ -82,7 +82,15 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  th.sortable { cursor: pointer; user-select: none; color: var(--accent); }
+  th.sortable { cursor: pointer; user-select: none; color: var(--accent); white-space: nowrap; }
+  th.sortable:hover { text-decoration: underline; }
+  th.sortable.active { color: var(--text); font-weight: 700; }
+  /* sort direction drawn with CSS borders (no glyph/font dependency) */
+  .caret { display: inline-block; width: 0; height: 0; margin-left: 5px; vertical-align: middle;
+           border-left: 4px solid transparent; border-right: 4px solid transparent; }
+  .caret.down { border-top: 5px solid var(--accent); }
+  .caret.up { border-bottom: 5px solid var(--accent); }
+  .legend { color: var(--muted); font-size: 12px; margin: 0 0 10px; line-height: 1.5; }
   thead th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
   tr.clickable { cursor: pointer; }
   tr.clickable:hover td { background: var(--panel2); }
@@ -262,6 +270,12 @@
         <button class="primary" id="scan-btn" onclick="loadRecs(true)">Refresh Scan</button>
         <span class="info" id="recs-info"></span>
       </div>
+      <div class="legend">
+        <strong>Score</strong> (0-100) ranks each contract by your scoring config:
+        delta fit, extrinsic %, spread tightness, open interest, volume, IV rank,
+        days-to-expiry, and trend/regime alignment. Higher is a better fit.
+        Click any column heading to sort; click a row to see the full score breakdown.
+      </div>
       <div id="recs-table"><div class="empty">Loading recommendations...</div></div>
       <div id="recs-degraded" class="note" style="margin-top:8px;"></div>
     </div>
@@ -429,7 +443,7 @@ function dRec(u, exp, dte, strike, delta, mid, sprPct, oi, vol, iv, ivr, spot, t
 
 const DEMO_BASE = {
   health: {
-    version: "1.2-demo", broker: "alpaca", data_source: "alpaca", mode: "paper",
+    version: "1.3-demo", broker: "alpaca", data_source: "alpaca", mode: "paper",
     live_trading_enabled: false,
     scan_loop: { enabled: true, interval_minutes: 15, threshold: 75,
                  market_hours_only: true, running: true, runs: 12,
@@ -754,6 +768,8 @@ const REC_COLUMNS = [
   ["spread_pct", "Spr%"], ["open_interest", "OI"], ["volume", "Vol"],
   ["iv", "IV"], ["iv_rank", "IVR"], ["score", "Score"],
 ];
+// text columns sort A->Z first; numeric columns sort high->low first
+const TEXT_COLS = new Set(["underlying", "occ_symbol", "expiration"]);
 
 async function loadRecs(refresh = false) {
   const btn = $("#scan-btn");
@@ -771,7 +787,11 @@ async function loadRecs(refresh = false) {
 }
 
 function sortRecs(key) {
-  recsSort = { key, dir: recsSort.key === key ? -recsSort.dir : -1 };
+  if (recsSort.key === key) {
+    recsSort = { key, dir: -recsSort.dir };          // same column: flip direction
+  } else {
+    recsSort = { key, dir: TEXT_COLS.has(key) ? 1 : -1 };  // new column: natural default
+  }
   renderRecs();
 }
 
@@ -780,7 +800,8 @@ function renderRecs() {
   if (!d) return;
   $("#recs-info").textContent =
     `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
-    `${d.contracts_scanned} contracts scanned, ${d.contracts_kept} passed filters, top ${d.results.length} shown` +
+    `${d.universe_size} tickers, ${d.contracts_scanned} contracts scanned, ` +
+    `${d.contracts_kept} passed filters, top ${d.results.length} shown` +
     (d.stale ? " | STALE" : "");
 
   const dropped = Object.entries(d.dropped || {}).map(([k, v]) => `${v} dropped: ${k}`).join(" | ");
@@ -802,10 +823,12 @@ function renderRecs() {
     return (av < bv ? -1 : av > bv ? 1 : 0) * recsSort.dir;
   });
 
-  const head = REC_COLUMNS.map(([key, label]) =>
-    `<th class="sortable" onclick="sortRecs('${key}')">${label}${
-      recsSort.key === key ? (recsSort.dir === -1 ? " v" : " ^") : ""}</th>`
-  ).join("") + "<th></th>";
+  const head = REC_COLUMNS.map(([key, label]) => {
+    const active = recsSort.key === key;
+    const caret = active ? `<span class="caret ${recsSort.dir === 1 ? "up" : "down"}"></span>` : "";
+    return `<th class="sortable${active ? " active" : ""}" onclick="sortRecs('${key}')"
+            title="Sort by ${label}">${label}${caret}</th>`;
+  }).join("") + "<th></th>";
 
   const body = rows.map((r) => {
     const main = `
