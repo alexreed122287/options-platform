@@ -79,7 +79,10 @@ class RegimeEngine:
 
     async def _breadth(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
         bcfg = cfg.get("breadth", {})
-        universe = self.config.get("universe")["tickers"]
+        # a small representative sample - NOT the full scan universe (which can
+        # be thousands of names and would blow the batch-quote URL limit)
+        universe_cfg = self.config.get("universe")
+        universe = universe_cfg.get("breadth_sample") or universe_cfg["tickers"][:20]
         parts: List[Dict[str, Any]] = []
         stale = False
         notes: List[str] = []

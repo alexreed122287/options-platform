@@ -119,7 +119,9 @@ class FMPClient(BaseClient):
             except ProviderError as exc:
                 log.info("batch quote endpoint unavailable (%s); "
                          "falling back to per-symbol quotes", str(exc)[:80])
-            if not out:
+            # Per-symbol fallback only for SMALL lists (breadth sample,
+            # watchlist). Never fan out thousands of calls on a limited plan.
+            if not out and len(symbols) <= 25:
                 for symbol in symbols:
                     try:
                         fetched = await self.quote(symbol)
@@ -127,7 +129,10 @@ class FMPClient(BaseClient):
                     except ProviderError as exc:
                         log.warning("quote unavailable for %s: %s", symbol, str(exc)[:80])
             if not out:
-                raise ProviderError("fmp: no quotes returned for batch")
+                raise ProviderError(
+                    f"fmp: no quotes for batch of {len(symbols)} "
+                    "(batch endpoint unavailable on this plan)"
+                )
             return out
 
         return await self.cache.get_or_fetch(

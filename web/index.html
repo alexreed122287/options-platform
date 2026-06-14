@@ -556,7 +556,9 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith("/regime")) return d.regime;
   if (path.startsWith("/recommendations")) {
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
-             universe_size: 15, contracts_scanned: 412, contracts_kept: 38,
+             universe_size: 3175, tickers_scanned: 40,
+             prefilter: { prefiltered: true, ranked: 3175, scanned: 40 },
+             contracts_scanned: 412, contracts_kept: 38,
              dropped: { "spread too wide": 12, "open interest below minimum": 9 },
              results: d.recs, degraded: [], stale: false };
   }
@@ -798,9 +800,13 @@ function sortRecs(key) {
 function renderRecs() {
   const d = recsData;
   if (!d) return;
+  const pf = d.prefilter || {};
+  const scanPhrase = pf.prefiltered
+    ? `${d.universe_size} tickers prefiltered to top ${d.tickers_scanned}`
+    : `${d.universe_size} tickers`;
   $("#recs-info").textContent =
     `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
-    `${d.universe_size} tickers, ${d.contracts_scanned} contracts scanned, ` +
+    `${scanPhrase}, ${d.contracts_scanned} contracts scanned, ` +
     `${d.contracts_kept} passed filters, top ${d.results.length} shown` +
     (d.stale ? " | STALE" : "");
 

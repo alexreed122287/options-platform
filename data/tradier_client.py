@@ -253,6 +253,36 @@ class TradierClient(BaseClient):
         })
         return listify((raw.get("quotes") or {}).get("quote"))
 
+    async def batch_quotes(self, symbols: List[str]) -> Fetched:
+        """Quotes for many symbols for the scan prefilter. Tradier accepts
+        large symbol lists per call, so this is cheap even for thousands of
+        names. Returns {symbol: {price, change_pct, volume, week_52_high}}."""
+        joined_key = f"tradier:batch:{len(symbols)}:{symbols[0] if symbols else ''}"
+
+        async def _fetch() -> Dict[str, Dict[str, Any]]:
+            out: Dict[str, Dict[str, Any]] = {}
+            chunk = 250  # keep the symbols= query string well under URL limits
+            for i in range(0, len(symbols), chunk):
+                quotes = await self._quotes(symbols[i:i + chunk])
+                for q in quotes:
+                    sym = (q.get("symbol") or "").upper()
+                    if not sym:
+                        continue
+                    out[sym] = {
+                        "symbol": sym,
+                        "price": _f(q.get("last")),
+                        "change_pct": _f(q.get("change_percentage")),
+                        "volume": _f(q.get("volume")),
+                        "ma50": None,
+                        "ma200": None,
+                        "week_52_high": _f(q.get("week_52_high")),
+                    }
+            if not out:
+                raise ProviderError("tradier: batch quotes returned no rows")
+            return out
+
+        return await self.cache.get_or_fetch(joined_key, self._ttls["stock_snapshot"], _fetch)
+
     async def stock_snapshot(self, symbol: str) -> Fetched:
         async def _fetch() -> Dict[str, Any]:
             quotes = await self._quotes([symbol])

@@ -8,6 +8,7 @@ contribution - so the UI can show exactly why a contract ranked where it did.
 import asyncio
 import datetime as dt
 import logging
+import math
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -122,6 +123,60 @@ def score_trend_alignment(trend01: Optional[float], regime01: Optional[float],
     trend01 = 0.5 if trend01 is None else trend01
     regime01 = 0.5 if regime01 is None else regime01
     return clamp01((trend01 * tw + regime01 * rw) / (tw + rw))
+
+
+def prefilter_score(quote: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[float]:
+    """Cheap 0..1 candidate score from a plain quote, for narrowing a large
+    universe before the expensive chain scan. Trend (price vs 50/200-day MA),
+    day momentum, and liquidity, weighted per config. Returns None when the
+    name is below the liquidity floor or has no usable price."""
+    price = quote.get("price")
+    volume = quote.get("volume") or 0
+    if not price or price <= 0:
+        return None
+    if volume < cfg.get("min_volume", 0):
+        return None
+    weights = cfg.get("weights", {})
+
+    ma50, ma200 = quote.get("ma50"), quote.get("ma200")
+    trend_pts, trend_n = 0.0, 0
+    if ma50:
+        trend_pts += 1.0 if price > ma50 else 0.0
+        trend_n += 1
+    if ma200:
+        trend_pts += 1.0 if price > ma200 else 0.0
+        trend_n += 1
+    if trend_n:
+        trend = trend_pts / trend_n
+    elif quote.get("week_52_high"):
+        # no moving averages (broker quotes) -> proximity to 52-week high as a
+        # trend proxy: near the highs reads as a strong uptrend
+        trend = clamp01(price / float(quote["week_52_high"]))
+    else:
+        trend = 0.5
+
+    change = quote.get("change_pct")
+    momentum = clamp01((change + 5.0) / 10.0) if change is not None else 0.5  # -5%..+5%
+
+    liquidity = clamp01(math.log10(volume + 1.0) / 8.0)  # ~1 at 100M shares
+
+    return (
+        float(weights.get("trend", 0.5)) * trend
+        + float(weights.get("momentum", 0.3)) * momentum
+        + float(weights.get("liquidity", 0.2)) * liquidity
+    )
+
+
+def prefilter_rank(quotes: Dict[str, Dict[str, Any]], cfg: Dict[str, Any]) -> List[Tuple[str, float]]:
+    """Rank a {symbol: quote} map by prefilter_score, descending. Names below
+    the liquidity floor or without a price are dropped."""
+    ranked = []
+    for symbol, quote in quotes.items():
+        score = prefilter_score(quote, cfg)
+        if score is not None:
+            ranked.append((symbol, round(score, 4)))
+    ranked.sort(key=lambda r: r[1], reverse=True)
+    return ranked
 
 
 def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -313,6 +368,50 @@ class Scanner:
                 return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                         "stale": False, "error": str(exc)}
 
+    async def _prefilter(self, universe: List[str]) -> Tuple[List[str], Dict[str, Any]]:
+        """Stage 1: narrow a large universe to the top candidates with cheap
+        batch quotes, before the expensive chain scan. Cached for
+        prefilter.cache_seconds so it is not repeated every scan refresh.
+        Small universes (<= max_chain_scan) or disabled prefilter pass through."""
+        pcfg = self.config.get("universe").get("prefilter", {})
+        cap = int(pcfg.get("max_chain_scan", 40))
+        info = {"prefiltered": False, "ranked": len(universe), "scanned": len(universe)}
+        if not pcfg.get("enabled", False) or len(universe) <= cap:
+            return universe, info
+
+        # Prefilter quotes come from the active DATA SOURCE (Tradier/Alpaca),
+        # which batch large symbol lists cheaply - NOT from FMP, whose plans
+        # cap quote volume. Needs a configured data source.
+        if not getattr(self.market_data, "configured", False) or \
+                not hasattr(self.market_data, "batch_quotes"):
+            info.update({"prefiltered": False, "scanned": min(cap, len(universe)),
+                         "note": f"prefilter needs a configured data source "
+                                 f"({self.market_data.name} not ready); scanning first {cap}"})
+            return universe[:cap], info
+
+        async def _rank() -> List[str]:
+            fetched = await self.market_data.batch_quotes(universe)
+            quotes = fetched.data
+            ranked = prefilter_rank(quotes, pcfg)
+            log.info("prefilter: ranked %d of %d names via %s, taking top %d",
+                     len(ranked), len(universe), self.market_data.name, cap)
+            return [sym for sym, _ in ranked[:cap]]
+
+        cache_s = float(pcfg.get("cache_seconds", 1800))
+        try:
+            fetched = await self.cache.get_or_fetch("scan:prefilter", cache_s, _rank)
+            top = fetched.data
+        except ProviderError as exc:
+            log.warning("prefilter unavailable (%s); scanning first %d", exc, cap)
+            info.update({"prefiltered": False, "scanned": min(cap, len(universe)),
+                         "note": f"prefilter quote fetch failed; scanning first {cap}"})
+            return universe[:cap], info
+        if not top:
+            top = universe[:cap]
+            info["prefilter_error"] = True
+        info.update({"prefiltered": True, "ranked": len(universe), "scanned": len(top)})
+        return top, info
+
     async def _scan_now(self) -> Dict[str, Any]:
         cfg = self.config.get("scoring")
         universe = self.config.get("universe")["tickers"]
@@ -320,9 +419,11 @@ class Scanner:
         regime = await self.regime.compute()
         regime01 = regime["score"] / 100.0
 
+        scan_list, prefilter_info = await self._prefilter(universe)
+
         sem = asyncio.Semaphore(int(settings["scan"].get("concurrency", 3)))
         per_ticker = await asyncio.gather(
-            *[self._scan_ticker(sym, regime01, cfg, sem) for sym in universe]
+            *[self._scan_ticker(sym, regime01, cfg, sem) for sym in scan_list]
         )
 
         rows = [row for result in per_ticker for row in result["rows"]]
@@ -336,6 +437,8 @@ class Scanner:
             "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
             "regime": {"label": regime["label"], "score": regime["score"]},
             "universe_size": len(universe),
+            "prefilter": prefilter_info,
+            "tickers_scanned": len(scan_list),
             "contracts_scanned": sum(r["scanned"] for r in per_ticker),
             "contracts_kept": len(rows),
             "dropped": dropped,

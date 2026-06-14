@@ -289,6 +289,43 @@ class AlpacaClient(BaseClient):
             f"alpaca:snapshot:{symbol}", self._ttls["stock_snapshot"], _fetch
         )
 
+    async def batch_quotes(self, symbols: List[str]) -> Fetched:
+        """Quotes for many symbols for the scan prefilter via multi-symbol
+        snapshots. Returns {symbol: {price, change_pct, volume}}."""
+        key = f"alpaca:batch:{len(symbols)}:{symbols[0] if symbols else ''}"
+
+        async def _fetch() -> Dict[str, Dict[str, Any]]:
+            out: Dict[str, Dict[str, Any]] = {}
+            feed = env("ALPACA_DATA_FEED", "iex")
+            chunk = 100
+            for i in range(0, len(symbols), chunk):
+                sub = symbols[i:i + chunk]
+                raw = await self._get_data(
+                    "/v2/stocks/snapshots", {"symbols": ",".join(sub), "feed": feed}
+                )
+                snapshots = raw.get("snapshots") if isinstance(raw.get("snapshots"), dict) else raw
+                for sym, snap in (snapshots or {}).items():
+                    trade = snap.get("latestTrade") or {}
+                    daily = snap.get("dailyBar") or {}
+                    prev = snap.get("prevDailyBar") or {}
+                    price = _f(trade.get("p")) or _f(daily.get("c"))
+                    prev_close = _f(prev.get("c"))
+                    change_pct = (
+                        round((price / prev_close - 1.0) * 100.0, 2)
+                        if price and prev_close else None
+                    )
+                    out[sym] = {
+                        "symbol": sym, "price": price or None,
+                        "change_pct": change_pct,
+                        "volume": _f(daily.get("v")),
+                        "ma50": None, "ma200": None,
+                    }
+            if not out:
+                raise ProviderError("alpaca: batch snapshots returned no rows")
+            return out
+
+        return await self.cache.get_or_fetch(key, self._ttls["stock_snapshot"], _fetch)
+
     async def bars(self, symbol: str, days: int = 120) -> Fetched:
         """Daily closes, ascending: [{date, close}]."""
         async def _fetch() -> List[Dict[str, Any]]:

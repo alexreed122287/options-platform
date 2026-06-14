@@ -248,3 +248,65 @@ def test_better_contract_ranks_higher():
         make_contract(delta=0.45, open_interest=150, volume=30), PERFECT_CTX, CFG
     )
     assert good["total"] > worse["total"]
+
+
+# ------------------------------------------------------ prefilter funnel
+
+PF_CFG = {
+    "min_volume": 400000,
+    "weights": {"trend": 0.5, "momentum": 0.3, "liquidity": 0.2},
+}
+
+
+def _quote(price=100.0, ma50=90.0, ma200=80.0, change_pct=2.0, volume=5_000_000):
+    return {"price": price, "ma50": ma50, "ma200": ma200,
+            "change_pct": change_pct, "volume": volume}
+
+
+def test_prefilter_drops_below_volume_floor():
+    assert S.prefilter_score(_quote(volume=100_000), PF_CFG) is None
+
+
+def test_prefilter_drops_missing_price():
+    assert S.prefilter_score(_quote(price=0), PF_CFG) is None
+
+
+def test_prefilter_uptrend_beats_downtrend():
+    up = S.prefilter_score(_quote(price=100, ma50=90, ma200=80, change_pct=3), PF_CFG)
+    down = S.prefilter_score(_quote(price=70, ma50=90, ma200=80, change_pct=-3), PF_CFG)
+    assert up > down
+
+
+def test_prefilter_full_uptrend_scores_high():
+    # price above both MAs, strong momentum, deep liquidity
+    score = S.prefilter_score(_quote(price=100, ma50=90, ma200=80, change_pct=5,
+                                     volume=50_000_000), PF_CFG)
+    assert score > 0.85
+
+
+def test_prefilter_rank_orders_and_filters():
+    quotes = {
+        "STRONG": _quote(price=100, ma50=90, ma200=80, change_pct=4, volume=20_000_000),
+        "WEAK": _quote(price=70, ma50=90, ma200=80, change_pct=-2, volume=1_000_000),
+        "ILLIQUID": _quote(volume=50_000),  # dropped by floor
+    }
+    ranked = S.prefilter_rank(quotes, PF_CFG)
+    symbols = [s for s, _ in ranked]
+    assert symbols == ["STRONG", "WEAK"]      # ILLIQUID filtered out
+    assert ranked[0][1] > ranked[1][1]        # sorted descending
+
+
+def test_prefilter_missing_mas_uses_neutral_trend():
+    # no MA data, no 52w -> trend neutral 0.5, still scores on momentum + liquidity
+    q = {"price": 50.0, "change_pct": 1.0, "volume": 2_000_000}
+    score = S.prefilter_score(q, PF_CFG)
+    assert score is not None and 0.0 < score < 1.0
+
+
+def test_prefilter_uses_52w_high_when_no_mas():
+    # broker quotes have no MAs but do have week_52_high -> proximity = trend
+    near_high = S.prefilter_score(
+        {"price": 99.0, "week_52_high": 100.0, "change_pct": 1.0, "volume": 3_000_000}, PF_CFG)
+    near_low = S.prefilter_score(
+        {"price": 40.0, "week_52_high": 100.0, "change_pct": 1.0, "volume": 3_000_000}, PF_CFG)
+    assert near_high > near_low

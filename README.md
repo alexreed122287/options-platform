@@ -55,6 +55,28 @@ expandable per-contract breakdown. It needs a **data source with options
 chains** - Alpaca, Tradier, or Public - so set one of those keys first. FMP
 alone powers the regime score but not the chain scan.
 
+### Universe and the prefilter funnel
+
+`config/universe.json` ships the full ~3,175-name Option Panda / Finviz
+universe (avg vol > 400K, price > $1). Deep-scanning that many option chains
+on every refresh is infeasible, so the scanner uses a two-stage funnel:
+
+1. **Prefilter (cheap):** batch-quote the whole universe through the active
+   data source (Tradier/Alpaca handle large symbol lists in a handful of
+   calls) and rank each name on trend, day momentum, and liquidity. Cached
+   for `prefilter.cache_seconds` (default 30 min).
+2. **Chain scan (expensive):** only the top `prefilter.max_chain_scan`
+   (default 40) names get the full option-chain analysis.
+
+Tune it in `config/universe.json`: raise `max_chain_scan` for deeper coverage
+(more API calls, slower refresh), lower it for speed. Set `prefilter.enabled`
+to `false` only for a small custom universe. The scan info line shows
+"N tickers prefiltered to top M" so the funnel is always visible.
+
+> The prefilter quotes through your **data source**, not FMP - FMP plans cap
+> quote volume and cannot price thousands of names. Use Tradier or Alpaca as
+> the data source for full-universe ranking.
+
 ## Live demo (no keys, no setup)
 
 The dashboard is phone-friendly and ships with a built-in demo mode: opened
