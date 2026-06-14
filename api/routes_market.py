@@ -56,6 +56,7 @@ async def recommendations(
     refresh: bool = Query(False),
     sector: Optional[str] = Query(None),
     theme: Optional[str] = Query(None),
+    dte: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     deps = get_deps()
     segs = deps.config.get("segments")
@@ -64,13 +65,20 @@ async def recommendations(
         raise HTTPException(status_code=400, detail=f"unknown sector: {sector}")
     if theme and theme not in (segs.get("themes") or {}):
         raise HTTPException(status_code=400, detail=f"unknown theme: {theme}")
-    return await deps.scanner.scan(refresh=refresh, sector=sector or None, theme=theme or None)
+    if dte:
+        valid = {o["key"] for o in deps.config.get("scoring").get("dte_presets", {}).get("options", [])}
+        if dte not in valid:
+            raise HTTPException(status_code=400, detail=f"unknown dte preset: {dte}")
+    return await deps.scanner.scan(
+        refresh=refresh, sector=sector or None, theme=theme or None, dte=dte or None
+    )
 
 
 @router.get("/segments")
 async def segments() -> Dict[str, Any]:
-    """Available sectors and themes (with ticker counts) for the scan filter."""
-    segs = get_deps().config.get("segments")
+    """Scan filter options: sectors and themes (with ticker counts) plus DTE presets."""
+    deps = get_deps()
+    segs = deps.config.get("segments")
     sector_of = segs.get("sector_of") or {}
     sector_counts: Dict[str, int] = {}
     for sec in sector_of.values():
@@ -79,7 +87,8 @@ async def segments() -> Dict[str, Any]:
                for s, n in sorted(sector_counts.items(), key=lambda kv: -kv[1])]
     themes = [{"name": t, "count": len(members)}
               for t, members in sorted((segs.get("themes") or {}).items())]
-    return {"sectors": sectors, "themes": themes}
+    dte_presets = deps.config.get("scoring").get("dte_presets", {}).get("options", [])
+    return {"sectors": sectors, "themes": themes, "dte_presets": dte_presets}
 
 
 @router.get("/universe")

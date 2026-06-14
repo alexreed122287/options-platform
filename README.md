@@ -88,7 +88,17 @@ etc.). The Recommendations tab has a sector dropdown and a theme dropdown; the
 scan restricts the universe to the chosen segment *before* prefiltering, so you
 get the best opportunities within that slice. `GET /api/segments` lists them
 with counts; `GET /api/recommendations?sector=Technology&theme=...` scans one.
-Each result row shows its sector. Regenerate the maps from a fresh Finviz
+Each result row shows its sector.
+
+### Targeting expiry (DTE filter)
+
+A DTE dropdown re-targets the scan's days-to-expiry. By default the band is
+25-60d, so near-term monthlies dominate; pick **Closer (7-25d)**, **Swing
+(45-90d)**, **Further out (90-180d)**, or **LEAPS (180-400d)** to bias toward
+shorter or longer-dated contracts. The selection overrides `dte_band` for both
+the chain fetch window and dte_fit scoring (`GET /api/recommendations?dte=leaps`).
+Presets live in `config/scoring.json` under `dte_presets`. Long-dated picks are
+naturally thinner - fewer pass the OI/spread liquidity filters. Regenerate the maps from a fresh Finviz
 export by re-running the import (sector from the CSV, themes from
 `industry/master_tickers.json`).
 

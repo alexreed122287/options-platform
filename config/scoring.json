@@ -20,10 +20,20 @@
     "falloff": 0.15
   },
   "dte_band": {
-    "_doc": "Target days-to-expiry range, falloff in days. Also widens the chain fetch window.",
+    "_doc": "Default target days-to-expiry range, falloff in days. Also widens the chain fetch window. The UI DTE filter overrides this per scan using dte_presets below.",
     "min": 25,
     "max": 60,
     "falloff_days": 15
+  },
+  "dte_presets": {
+    "_doc": "Selectable expiry targets for the scan's DTE filter. Each overrides dte_band (chain fetch window + dte_fit scoring) for that scan. 'default' (no selection) uses dte_band above.",
+    "options": [
+      { "key": "closer", "label": "Closer (7-25d)", "min": 7, "max": 25, "falloff_days": 7 },
+      { "key": "standard", "label": "Standard (25-60d)", "min": 25, "max": 60, "falloff_days": 15 },
+      { "key": "swing", "label": "Swing (45-90d)", "min": 45, "max": 90, "falloff_days": 20 },
+      { "key": "further", "label": "Further out (90-180d)", "min": 90, "max": 180, "falloff_days": 30 },
+      { "key": "leaps", "label": "LEAPS (180-400d)", "min": 180, "max": 400, "falloff_days": 60 }
+    ]
   },
   "extrinsic": {
     "_doc": "Extrinsic premium as fraction of mid. <= best_max_pct scores 1.0, >= worst_pct scores 0.0.",

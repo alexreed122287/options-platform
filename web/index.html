@@ -286,6 +286,9 @@
         <select id="filter-theme" onchange="onFilterChange()" title="Segment by Finviz theme">
           <option value="">All themes</option>
         </select>
+        <select id="filter-dte" onchange="onFilterChange()" title="Target days to expiry">
+          <option value="">DTE: default</option>
+        </select>
         <button class="small" id="filter-clear" onclick="clearFilters()" style="display:none">Clear</button>
         <span class="info" id="recs-info"></span>
       </div>
@@ -507,6 +510,10 @@ const DEMO_BASE = {
          { delta: 1.0, extRaw: 0.34, ext: 0.30, spr: 0.93, oi: 1.0, vol: 0.55, dte: 0.6, align: 0.888 }),
     dRec("NVDA", "2026-07-17", 37, 165, 0.78, 17.60, 0.02, 2890, 980, 0.41, 0.34, 182.4, 1.0,
          { delta: 0.87, extRaw: 0.03, ext: 1.0, spr: 1.0, oi: 1.0, vol: 0.95, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-06-26", 16, 180, 0.66, 8.20, 0.03, 1500, 900, 0.45, 0.40, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.28, ext: 0.40, spr: 0.92, oi: 1.0, vol: 0.95, dte: 0.40, align: 0.888 }),
+    dRec("NVDA", "2027-01-15", 219, 170, 0.70, 30.50, 0.04, 800, 120, 0.38, 0.30, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.45, ext: 0.0, spr: 0.88, oi: 0.40, vol: 0.20, dte: 0.0, align: 0.888 }),
     dRec("MSFT", "2026-07-17", 37, 480, 0.68, 28.4, 0.018, 2310, 640, 0.24, 0.22, 502.1, 1.0,
          { delta: 1.0, extRaw: 0.221, ext: 0.596, spr: 1.0, oi: 1.0, vol: 0.636, dte: 1.0, align: 0.888 }),
     dRec("MSFT", "2026-08-21", 72, 490, 0.63, 24.9, 0.022, 1450, 380, 0.25, 0.24, 502.1, 1.0,
@@ -581,6 +588,13 @@ const DEMO_THEMES = {
   "Semiconductors": ["NVDA", "AMD"],
   "Mega Cap Tech": ["AAPL", "MSFT", "NVDA", "META"],
 };
+const DEMO_DTE_PRESETS = [
+  { key: "closer", label: "Closer (7-25d)", min: 7, max: 25 },
+  { key: "standard", label: "Standard (25-60d)", min: 25, max: 60 },
+  { key: "swing", label: "Swing (45-90d)", min: 45, max: 90 },
+  { key: "further", label: "Further out (90-180d)", min: 90, max: 180 },
+  { key: "leaps", label: "LEAPS (180-400d)", min: 180, max: 400 },
+];
 
 let demoState = null;
 
@@ -601,14 +615,17 @@ async function demoApi(path, opts = {}) {
       sectors: Object.entries(counts).map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count),
       themes: Object.entries(DEMO_THEMES).map(([name, m]) => ({ name, count: m.length })),
+      dte_presets: DEMO_DTE_PRESETS,
     };
   }
   if (path.startsWith("/recommendations")) {
     const params = new URLSearchParams((path.split("?")[1]) || "");
-    const sector = params.get("sector"), theme = params.get("theme");
+    const sector = params.get("sector"), theme = params.get("theme"), dte = params.get("dte");
+    const dteBand = dte ? DEMO_DTE_PRESETS.find((p) => p.key === dte) : null;
     let recs = d.recs;
     if (sector) recs = recs.filter((r) => DEMO_SECTOR[r.underlying] === sector);
     if (theme) recs = recs.filter((r) => (DEMO_THEMES[theme] || []).includes(r.underlying));
+    if (dteBand) recs = recs.filter((r) => r.dte >= dteBand.min && r.dte <= dteBand.max);
     const map = {};
     [...recs].sort((a, b) => b.score - a.score).forEach((r) => {
       (map[r.underlying] = map[r.underlying] || []).push(r);
@@ -622,7 +639,8 @@ async function demoApi(path, opts = {}) {
     const fullUniverse = sector || theme ? Math.max(40, results.length * 9) : 3175;
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
              universe_size: fullUniverse, tickers_scanned: Math.min(40, groups.length || 40),
-             segment: { sector: sector || null, theme: theme || null },
+             segment: { sector: sector || null, theme: theme || null,
+                        dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null },
              prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
              contracts_scanned: 412, contracts_kept: results.length,
              tickers_with_picks: groups.length,
@@ -828,7 +846,7 @@ async function loadRegime() {
 /* ---------------------------- recommendations -------------------------- */
 
 let recsData = null;
-let recsFilter = { sector: "", theme: "" };
+let recsFilter = { sector: "", theme: "", dte: "" };
 let segmentsLoaded = false;
 let recsSort = { key: "score", dir: -1 };
 let expandedTicker = null;   // which ticker's option ladder is open
@@ -859,19 +877,27 @@ async function loadSegments() {
       o.value = x.name; o.textContent = `${x.name} (${x.count})`;
       themeSel.appendChild(o);
     });
+    const dteSel = $("#filter-dte");
+    (s.dte_presets || []).forEach((x) => {
+      const o = document.createElement("option");
+      o.value = x.key; o.textContent = `DTE: ${x.label}`;
+      dteSel.appendChild(o);
+    });
     segmentsLoaded = true;
   } catch (e) { /* segments optional; filters just stay at "All" */ }
 }
 
 function onFilterChange() {
-  recsFilter = { sector: $("#filter-sector").value, theme: $("#filter-theme").value };
-  $("#filter-clear").style.display = (recsFilter.sector || recsFilter.theme) ? "" : "none";
+  recsFilter = { sector: $("#filter-sector").value, theme: $("#filter-theme").value,
+                 dte: $("#filter-dte").value };
+  $("#filter-clear").style.display =
+    (recsFilter.sector || recsFilter.theme || recsFilter.dte) ? "" : "none";
   expandedTicker = null; expandedOcc = null;
   loadRecs(true);
 }
 
 function clearFilters() {
-  $("#filter-sector").value = ""; $("#filter-theme").value = "";
+  $("#filter-sector").value = ""; $("#filter-theme").value = ""; $("#filter-dte").value = "";
   onFilterChange();
 }
 
@@ -884,6 +910,7 @@ async function loadRecs(refresh = false) {
     if (refresh) params.set("refresh", "true");
     if (recsFilter.sector) params.set("sector", recsFilter.sector);
     if (recsFilter.theme) params.set("theme", recsFilter.theme);
+    if (recsFilter.dte) params.set("dte", recsFilter.dte);
     const qs = params.toString();
     recsData = await api("/recommendations" + (qs ? "?" + qs : ""));
     renderRecs();
@@ -925,7 +952,8 @@ function renderRecs() {
 
   const groups = recGroups(d);
   const seg = d.segment || {};
-  const segPhrase = [seg.sector, seg.theme].filter(Boolean).join(" + ");
+  const dtePhrase = seg.dte_band ? `DTE ${seg.dte_band.min}-${seg.dte_band.max}d` : "";
+  const segPhrase = [seg.sector, seg.theme, dtePhrase].filter(Boolean).join(" + ");
   $("#recs-info").textContent =
     `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
     (segPhrase ? `[${segPhrase}] ` : "") +

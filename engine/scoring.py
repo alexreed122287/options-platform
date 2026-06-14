@@ -383,6 +383,18 @@ class Scanner:
     def _seg_key(sector: Optional[str], theme: Optional[str]) -> str:
         return f"{sector or 'all'}|{theme or 'all'}"
 
+    def _resolve_dte_band(self, cfg: Dict[str, Any], dte_preset: Optional[str]) -> Dict[str, Any]:
+        """The active DTE target: a named preset overrides the default dte_band
+        (both the chain fetch window and dte_fit scoring follow it)."""
+        base = cfg["dte_band"]
+        if not dte_preset or dte_preset == "default":
+            return base
+        for opt in cfg.get("dte_presets", {}).get("options", []):
+            if opt.get("key") == dte_preset:
+                return {"min": opt["min"], "max": opt["max"],
+                        "falloff_days": opt.get("falloff_days", base.get("falloff_days", 15))}
+        return base
+
     async def _prefilter(self, universe: List[str], seg_key: str) -> Tuple[List[str], Dict[str, Any]]:
         """Stage 1: narrow a large universe to the top candidates with cheap
         batch quotes, before the expensive chain scan. Cached per segment for
@@ -427,20 +439,24 @@ class Scanner:
         info.update({"prefiltered": True, "ranked": len(universe), "scanned": len(top)})
         return top, info
 
-    async def _scan_now(self, sector: Optional[str] = None,
-                        theme: Optional[str] = None) -> Dict[str, Any]:
-        cfg = self.config.get("scoring")
+    async def _scan_now(self, sector: Optional[str] = None, theme: Optional[str] = None,
+                        dte_preset: Optional[str] = None) -> Dict[str, Any]:
+        base_cfg = self.config.get("scoring")
+        dte_band = self._resolve_dte_band(base_cfg, dte_preset)
+        cfg = {**base_cfg, "dte_band": dte_band}   # DTE filter applied here
         universe = self._filtered_universe(sector, theme)
         settings = self.config.get("settings")
         sector_of = self.config.get("segments").get("sector_of", {})
         regime = await self.regime.compute()
         regime01 = regime["score"] / 100.0
+        seg = {"sector": sector, "theme": theme, "dte": dte_preset or "default",
+               "dte_band": dte_band}
 
         if not universe:
             return {
                 "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
                 "regime": {"label": regime["label"], "score": regime["score"]},
-                "universe_size": 0, "segment": {"sector": sector, "theme": theme},
+                "universe_size": 0, "segment": seg,
                 "prefilter": {"prefiltered": False}, "tickers_scanned": 0,
                 "contracts_scanned": 0, "contracts_kept": 0, "tickers_with_picks": 0,
                 "dropped": {}, "groups": [], "results": [], "degraded": [],
@@ -489,7 +505,7 @@ class Scanner:
             "as_of": dt.datetime.now(ET).isoformat(timespec="seconds"),
             "regime": {"label": regime["label"], "score": regime["score"]},
             "universe_size": len(universe),
-            "segment": {"sector": sector, "theme": theme},
+            "segment": seg,
             "prefilter": prefilter_info,
             "tickers_scanned": len(scan_list),
             "contracts_scanned": sum(r["scanned"] for r in per_ticker),
@@ -506,12 +522,14 @@ class Scanner:
         }
 
     async def scan(self, refresh: bool = False, sector: Optional[str] = None,
-                   theme: Optional[str] = None) -> Dict[str, Any]:
+                   theme: Optional[str] = None, dte: Optional[str] = None) -> Dict[str, Any]:
         ttl = self.config.get("settings")["cache_ttls_seconds"]["scan"]
-        cache_key = f"scan:result:{self._seg_key(sector, theme)}"
+        # result cache is per (segment + DTE); the prefilter cache (inside
+        # _scan_now) is keyed by segment only, so it is reused across DTE presets
+        cache_key = f"scan:result:{self._seg_key(sector, theme)}|{dte or 'default'}"
 
         async def _compute() -> Dict[str, Any]:
-            return await self._scan_now(sector, theme)
+            return await self._scan_now(sector, theme, dte)
 
         if refresh:
             result = await _compute()
