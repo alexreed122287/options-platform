@@ -260,6 +260,7 @@
   <button data-tab="watchlist" onclick="showTab('watchlist')">Watchlist</button>
   <button data-tab="positions" onclick="showTab('positions')">Positions</button>
   <button data-tab="journal" onclick="showTab('journal')">Journal</button>
+  <button data-tab="validation" onclick="showTab('validation')">Validation</button>
   <button data-tab="settings" onclick="showTab('settings')">Settings</button>
 </nav>
 
@@ -353,6 +354,35 @@
         <span class="info">Orders are auto-logged at submit time with the regime and score snapshot.</span>
       </div>
       <div id="journal-table"><div class="empty">No journal entries yet</div></div>
+    </div>
+  </section>
+
+  <!-- ============================== VALIDATION =========================== -->
+  <section id="tab-validation" class="hidden">
+    <div class="panel">
+      <h3>Does the score work? (forward validation)</h3>
+      <div class="set-note">
+        Historical option data isn't available on these feeds, so this measures the
+        score's edge <strong>going forward</strong>: it snapshots top-scoring contracts
+        with their entry price, then re-quotes them over the following days and records
+        the realized option return. If the score has edge, higher-score buckets should
+        show better average returns. <strong>This needs days to weeks of data to mean
+        anything</strong> - one snapshot proves nothing.
+      </div>
+      <div class="toolbar" style="margin-top:10px;">
+        <button class="primary" onclick="trackingSnapshot()" id="track-snap">Snapshot top picks now</button>
+        <button onclick="trackingUpdate()" id="track-update">Update outcomes</button>
+        <span class="info" id="track-info"></span>
+      </div>
+    </div>
+    <div class="grid cols3" id="track-summary"></div>
+    <div class="panel" style="margin-top:14px;">
+      <h3>Realized return by entry-score bucket</h3>
+      <div id="track-buckets"><div class="empty">No tracked outcomes yet. Snapshot some picks, then update outcomes after a few days.</div></div>
+    </div>
+    <div class="panel">
+      <h3>Tracked entries</h3>
+      <div id="track-table"><div class="empty">Nothing tracked yet.</div></div>
     </div>
   </section>
 
@@ -730,6 +760,28 @@ async function demoApi(path, opts = {}) {
     return { ok: true };
   }
   if (path.startsWith("/alerts")) return { items: d.alerts };
+  if (path.startsWith("/tracking/snapshot")) return { snapshot_date: "2026-06-14", candidates: 25, new_entries: 25 };
+  if (path.startsWith("/tracking/update")) return { updated: 18, expired: 2, errors: 0, remaining_open: 0 };
+  if (path.startsWith("/tracking/report")) {
+    return {
+      total_tracked: 60, with_outcome: 42, open: 18,
+      buckets: [
+        { range: "0-50", count: 0, avg_option_return: null, avg_underlying_return: null, win_rate: null, avg_days_held: null },
+        { range: "50-60", count: 6, avg_option_return: -3.1, avg_underlying_return: -0.4, win_rate: 0.333, avg_days_held: 5.2 },
+        { range: "60-70", count: 11, avg_option_return: 1.8, avg_underlying_return: 0.6, win_rate: 0.545, avg_days_held: 4.8 },
+        { range: "70-80", count: 14, avg_option_return: 6.4, avg_underlying_return: 1.5, win_rate: 0.643, avg_days_held: 5.1 },
+        { range: "80-90", count: 9, avg_option_return: 9.7, avg_underlying_return: 2.2, win_rate: 0.667, avg_days_held: 4.6 },
+        { range: "90-100+", count: 2, avg_option_return: 12.5, avg_underlying_return: 2.9, win_rate: 0.5, avg_days_held: 6.0 },
+      ],
+    };
+  }
+  if (path.startsWith("/tracking")) {
+    return { items: [
+      { snapshot_date: "2026-06-12", occ_symbol: "NVDA260717C00170000", underlying: "NVDA", score: 87.3, entry_mid: 13.10, current_mid: 14.25, option_return_pct: 8.8, underlying_return_pct: 2.1, days_held: 2, status: "open" },
+      { snapshot_date: "2026-06-12", occ_symbol: "MSFT260717C00480000", underlying: "MSFT", score: 81.0, entry_mid: 27.5, current_mid: 28.4, option_return_pct: 3.3, underlying_return_pct: 0.8, days_held: 2, status: "open" },
+      { snapshot_date: "2026-06-10", occ_symbol: "AMD260619C00150000", underlying: "AMD", score: 64.2, entry_mid: 10.2, current_mid: 9.6, option_return_pct: -5.9, underlying_return_pct: -1.2, days_held: 4, status: "open" },
+    ]};
+  }
   throw new Error("demo mode: unknown endpoint " + path);
 }
 
@@ -766,11 +818,12 @@ function setBanner(key, message) {
 function showTab(name) {
   document.querySelectorAll("nav#tabs button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === name));
-  ["regime", "recs", "watchlist", "positions", "journal", "settings"].forEach((t) =>
+  ["regime", "recs", "watchlist", "positions", "journal", "validation", "settings"].forEach((t) =>
     $("#tab-" + t).classList.toggle("hidden", t !== name));
   if (name === "positions") loadPositions();
   if (name === "watchlist") loadWatchlist();
   if (name === "journal") loadJournal();
+  if (name === "validation") loadValidation();
   if (name === "settings") loadSettings();
 }
 
@@ -1706,6 +1759,89 @@ async function saveSettings() {
     btn.disabled = false;
     btn.textContent = "Save settings";
   }
+}
+
+/* ------------------------------ validation ----------------------------- */
+
+async function loadValidation() {
+  try {
+    const rep = await api("/tracking/report");
+    $("#track-summary").innerHTML = [
+      ["Tracked entries", rep.total_tracked],
+      ["With an outcome", rep.with_outcome],
+      ["Still open", rep.open],
+    ].map(([label, value]) => `
+      <div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+
+    const haveData = rep.buckets.some((b) => b.count > 0);
+    $("#track-buckets").innerHTML = haveData ? `
+      <table>
+        <thead><tr><th>Score bucket</th><th>Count</th><th>Avg option return</th>
+        <th>Avg underlying return</th><th>Win rate</th><th>Avg days held</th></tr></thead>
+        <tbody>${rep.buckets.map((b) => `
+          <tr>
+            <td><strong>${esc(b.range)}</strong></td>
+            <td>${b.count}</td>
+            <td>${b.avg_option_return == null ? "-" : signed(b.avg_option_return, 1, "%")}</td>
+            <td>${b.avg_underlying_return == null ? "-" : signed(b.avg_underlying_return, 1, "%")}</td>
+            <td>${b.win_rate == null ? "-" : pct01(b.win_rate)}</td>
+            <td>${b.avg_days_held == null ? "-" : b.avg_days_held}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="set-note">If the score has edge, average option return should trend up as the
+        bucket rises. Compare it to the underlying return to see how much is direction vs structure.</div>`
+      : '<div class="empty">No tracked outcomes yet. Snapshot some picks, then update outcomes after a few days.</div>';
+
+    const t = await api("/tracking?limit=100");
+    $("#track-table").innerHTML = t.items.length ? `
+      <table>
+        <thead><tr><th>Snapshot</th><th>Contract</th><th>Ticker</th><th>Score</th>
+        <th>Entry mid</th><th>Now</th><th>Option ret</th><th>Undl ret</th><th>Days</th><th>Status</th></tr></thead>
+        <tbody>${t.items.map((it) => `
+          <tr>
+            <td class="mut">${esc(it.snapshot_date)}</td>
+            <td class="mono">${esc(it.occ_symbol)}</td>
+            <td><strong>${esc(it.underlying || "")}</strong></td>
+            <td>${scorePill(it.score)}</td>
+            <td>${money(it.entry_mid)}</td>
+            <td>${it.current_mid == null ? "-" : money(it.current_mid)}</td>
+            <td>${it.option_return_pct == null ? "-" : signed(it.option_return_pct, 1, "%")}</td>
+            <td>${it.underlying_return_pct == null ? "-" : signed(it.underlying_return_pct, 1, "%")}</td>
+            <td>${it.days_held == null ? "-" : it.days_held}</td>
+            <td class="mut">${esc(it.status)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>` : '<div class="empty">Nothing tracked yet.</div>';
+  } catch (e) {
+    $("#track-buckets").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function trackingSnapshot() {
+  const btn = $("#track-snap");
+  btn.disabled = true; btn.textContent = "Snapshotting...";
+  try {
+    const r = await api("/tracking/snapshot", { method: "POST", body: JSON.stringify({ top_n: 25 }) });
+    $("#track-info").textContent = `Snapshot ${r.snapshot_date}: ${r.new_entries} new of ${r.candidates}.`;
+    toast(`Snapshotted ${r.new_entries} picks`);
+    loadValidation();
+  } catch (e) {
+    toast("Snapshot failed: " + e.message, true);
+  } finally { btn.disabled = false; btn.textContent = "Snapshot top picks now"; }
+}
+
+async function trackingUpdate() {
+  const btn = $("#track-update");
+  btn.disabled = true; btn.textContent = "Updating...";
+  try {
+    const r = await api("/tracking/update", { method: "POST" });
+    $("#track-info").textContent = `Updated ${r.updated} (expired ${r.expired}, errors ${r.errors}).`;
+    toast(`Updated ${r.updated} outcomes`);
+    loadValidation();
+  } catch (e) {
+    toast("Update failed: " + e.message, true);
+  } finally { btn.disabled = false; btn.textContent = "Update outcomes"; }
 }
 
 /* -------------------------------- alerts ------------------------------- */

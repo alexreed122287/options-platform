@@ -379,3 +379,37 @@ async def alerts(unseen_only: bool = Query(False),
 async def alerts_mark_seen() -> Dict[str, Any]:
     db.execute("UPDATE alerts SET seen = 1 WHERE seen = 0")
     return {"ok": True}
+
+
+# ----------------------------------------------- score-validation tracker
+
+class SnapshotRequest(BaseModel):
+    top_n: int = Field(25, ge=1, le=200)
+    sector: Optional[str] = None
+    theme: Optional[str] = None
+    dte: Optional[str] = None
+
+
+@router.post("/tracking/snapshot")
+async def tracking_snapshot(req: SnapshotRequest) -> Dict[str, Any]:
+    try:
+        return await get_deps().tracker.snapshot(
+            top_n=req.top_n, sector=req.sector, theme=req.theme, dte=req.dte
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.post("/tracking/update")
+async def tracking_update() -> Dict[str, Any]:
+    return await get_deps().tracker.update_outcomes()
+
+
+@router.get("/tracking/report")
+async def tracking_report() -> Dict[str, Any]:
+    return get_deps().tracker.report()
+
+
+@router.get("/tracking")
+async def tracking_recent(limit: int = Query(100, ge=1, le=1000)) -> Dict[str, Any]:
+    return {"items": get_deps().tracker.recent(limit)}

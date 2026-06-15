@@ -57,6 +57,27 @@ CREATE TABLE IF NOT EXISTS alerts (
   seen INTEGER NOT NULL DEFAULT 0,
   UNIQUE (occ_symbol, date)
 );
+CREATE TABLE IF NOT EXISTS score_tracking (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_date TEXT NOT NULL,
+  snapshot_at TEXT NOT NULL,
+  occ_symbol TEXT NOT NULL,
+  underlying TEXT,
+  expiration TEXT,
+  dte INTEGER,
+  delta REAL,
+  score REAL NOT NULL,
+  entry_mid REAL,
+  entry_spot REAL,
+  updated_at TEXT,
+  current_mid REAL,
+  current_spot REAL,
+  option_return_pct REAL,
+  underlying_return_pct REAL,
+  days_held REAL,
+  status TEXT NOT NULL DEFAULT 'open',
+  UNIQUE (occ_symbol, snapshot_date)
+);
 """
 
 

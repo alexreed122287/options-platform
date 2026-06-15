@@ -14,6 +14,7 @@ from data.tradier_client import TradierClient
 from engine.alerts import AlertLoop
 from engine.regime import RegimeEngine
 from engine.scoring import Scanner
+from engine.tracking import ScoreTracker
 
 log = logging.getLogger("api.deps")
 
@@ -76,6 +77,8 @@ class Deps:
         # data source = who feeds the scanner (chains/greeks/spot)
         self.scanner = Scanner(self.fmp, self.alpaca, self.regime, self.config, self.cache)
         self.alerts = AlertLoop(self.scanner, self.alpaca, self.config)
+        self.tracker = ScoreTracker(self.scanner, self.alpaca, self.cache)
+        self.alerts.tracker = self.tracker   # daily auto-snapshot
         self.reconfigure()
 
     def reconfigure(self) -> None:
@@ -99,6 +102,8 @@ class Deps:
         # cached scan/regime so the next read reflects the new source
         self.scanner.market_data = self.market_data
         self.alerts.market_data = self.market_data
+        if hasattr(self, "tracker"):
+            self.tracker.broker = self.broker
         self.cache.invalidate_prefix("scan:result:")
         self.cache.invalidate_prefix("scan:prefilter:")
         self.cache.invalidate("regime:result")

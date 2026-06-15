@@ -27,6 +27,8 @@ class AlertLoop:
         self.scanner = scanner
         self.market_data = market_data  # alpaca or public, per DATA_SOURCE
         self.config = config
+        self.tracker = None             # set by deps; daily score snapshots
+        self._last_snapshot_date = None
         self.runs = 0
         self.last_run: Optional[str] = None
         self.last_skip: Optional[str] = None
@@ -114,6 +116,16 @@ class AlertLoop:
         result = await self.scanner.scan(refresh=True)
         threshold = float(cfg.get("alert_score_threshold", 75))
         self.last_new_alerts = self.process_results(result.get("results", []), threshold)
+
+        # once per ET day, snapshot the top picks for the forward score-validation
+        today = dt.datetime.now(ET).date().isoformat()
+        if self.tracker and self._last_snapshot_date != today and result.get("results"):
+            try:
+                await self.tracker.snapshot(top_n=int(cfg.get("snapshot_top_n", 25)))
+                self._last_snapshot_date = today
+            except Exception:
+                log.exception("daily score snapshot failed")
+
         degraded = result.get("degraded") or []
         self.last_error = (
             "; ".join(f"{d['symbol']}: {d['error'][:80]}" for d in degraded[:3])
