@@ -367,7 +367,9 @@
         with their entry price, then re-quotes them over the following days and records
         the realized option return. If the score has edge, higher-score buckets should
         show better average returns. <strong>This needs days to weeks of data to mean
-        anything</strong> - one snapshot proves nothing.
+        anything</strong> - one snapshot proves nothing. It runs
+        <strong>automatically once per market day</strong> while the server is up (snapshot
+        + outcome update); the buttons below are for on-demand runs.
       </div>
       <div class="toolbar" style="margin-top:10px;">
         <button class="primary" onclick="trackingSnapshot()" id="track-snap">Snapshot top picks now</button>
@@ -1767,10 +1769,15 @@ async function saveSettings() {
 async function loadValidation() {
   try {
     const rep = await api("/tracking/report");
-    if (rep.quote_source) {
-      $("#track-source").textContent =
-        `Marks (entry + re-quote) via ${rep.quote_source} for a consistent, accurate comparison.`;
-    }
+    let sourceLine = rep.quote_source
+      ? `Marks (entry + re-quote) via ${rep.quote_source} for a consistent, accurate comparison.`
+      : "";
+    try {
+      const h = await api("/health");
+      const last = h.scan_loop && h.scan_loop.last_tracker_run;
+      sourceLine += last ? ` Last automatic run: ${last}.` : " Automatic daily run is armed (waiting for the next market-day tick).";
+    } catch (e) { /* health optional */ }
+    $("#track-source").textContent = sourceLine;
     $("#track-summary").innerHTML = [
       ["Tracked entries", rep.total_tracked],
       ["With an outcome", rep.with_outcome],

@@ -29,6 +29,7 @@ class AlertLoop:
         self.config = config
         self.tracker = None             # set by deps; daily score snapshots
         self._last_snapshot_date = None
+        self.last_tracker_run = None    # ET timestamp of the last daily tracker run
         self.runs = 0
         self.last_run: Optional[str] = None
         self.last_skip: Optional[str] = None
@@ -51,6 +52,7 @@ class AlertLoop:
             "last_skip": self.last_skip,
             "last_error": self.last_error,
             "last_new_alerts": self.last_new_alerts,
+            "last_tracker_run": self.last_tracker_run,
         }
 
     # ------------------------------------------------------ alert writing
@@ -117,14 +119,20 @@ class AlertLoop:
         threshold = float(cfg.get("alert_score_threshold", 75))
         self.last_new_alerts = self.process_results(result.get("results", []), threshold)
 
-        # once per ET day, snapshot the top picks for the forward score-validation
-        today = dt.datetime.now(ET).date().isoformat()
+        # once per ET market day: snapshot the top picks AND re-mark open
+        # outcomes, so the forward score-validation runs hands-free
+        now_et = dt.datetime.now(ET)
+        today = now_et.date().isoformat()
         if self.tracker and self._last_snapshot_date != today and result.get("results"):
             try:
-                await self.tracker.snapshot(top_n=int(cfg.get("snapshot_top_n", 25)))
+                snap = await self.tracker.snapshot(top_n=int(cfg.get("snapshot_top_n", 25)))
+                upd = await self.tracker.update_outcomes()
                 self._last_snapshot_date = today
+                self.last_tracker_run = now_et.isoformat(timespec="seconds")
+                log.info("daily tracker run: +%d snapshots, %d outcomes updated",
+                         snap.get("new_entries", 0), upd.get("updated", 0))
             except Exception:
-                log.exception("daily score snapshot failed")
+                log.exception("daily tracker run failed")
 
         degraded = result.get("degraded") or []
         self.last_error = (
