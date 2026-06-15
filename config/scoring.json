@@ -28,11 +28,41 @@
   "dte_presets": {
     "_doc": "Selectable expiry targets for the scan's DTE filter. Each overrides dte_band (chain fetch window + dte_fit scoring) for that scan. 'default' (no selection) uses dte_band above.",
     "options": [
-      { "key": "closer", "label": "Closer (7-25d)", "min": 7, "max": 25, "falloff_days": 7 },
-      { "key": "standard", "label": "Standard (25-60d)", "min": 25, "max": 60, "falloff_days": 15 },
-      { "key": "swing", "label": "Swing (45-90d)", "min": 45, "max": 90, "falloff_days": 20 },
-      { "key": "further", "label": "Further out (90-180d)", "min": 90, "max": 180, "falloff_days": 30 },
-      { "key": "leaps", "label": "LEAPS (180-400d)", "min": 180, "max": 400, "falloff_days": 60 }
+      {
+        "key": "closer",
+        "label": "Closer (7-25d)",
+        "min": 7,
+        "max": 25,
+        "falloff_days": 7
+      },
+      {
+        "key": "standard",
+        "label": "Standard (25-60d)",
+        "min": 25,
+        "max": 60,
+        "falloff_days": 15
+      },
+      {
+        "key": "swing",
+        "label": "Swing (45-90d)",
+        "min": 45,
+        "max": 90,
+        "falloff_days": 20
+      },
+      {
+        "key": "further",
+        "label": "Further out (90-180d)",
+        "min": 90,
+        "max": 180,
+        "falloff_days": 30
+      },
+      {
+        "key": "leaps",
+        "label": "LEAPS (180-400d)",
+        "min": 180,
+        "max": 400,
+        "falloff_days": 60
+      }
     ]
   },
   "extrinsic": {
@@ -45,8 +75,14 @@
     "best_max_pct": 0.02,
     "worst_pct": 0.1
   },
-  "open_interest": { "floor": 100, "full_credit": 2000 },
-  "volume": { "floor": 10, "full_credit": 1000 },
+  "open_interest": {
+    "floor": 100,
+    "full_credit": 2000
+  },
+  "volume": {
+    "floor": 10,
+    "full_credit": 1000
+  },
   "iv_rank": {
     "_doc": "Percentile of today's ATM IV vs the trailing 90 days stored in iv_history. Neutral 0.5 until min_history_days of history exists.",
     "prefer_low": true,

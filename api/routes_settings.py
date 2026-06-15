@@ -1,5 +1,5 @@
 """Settings routes: inspect and update provider keys + broker/data-source
-selection from the dashboard.
+selection, and the scoring weights, from the dashboard.
 
 Security model:
   - All /api routes already sit behind the optional DASHBOARD_TOKEN gate.
@@ -9,6 +9,7 @@ Security model:
     gitignored. New secrets are registered with the log redactor.
   - Demo mode has no backend, so the dashboard's Settings tab is read-only there.
 """
+import json
 import logging
 import threading
 from typing import Any, Dict, Optional
@@ -16,9 +17,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_deps
+from api.deps import CONFIG_DIR, get_deps
 from data.base import register_secret
 from data.env import ROOT, env, env_bool
+
+WEIGHT_KEYS = ("delta_fit", "extrinsic", "spread", "open_interest",
+               "volume", "iv_rank", "dte_fit", "trend_alignment")
 
 log = logging.getLogger("api.settings")
 
@@ -169,3 +173,60 @@ async def update_settings(req: SettingsUpdate) -> Dict[str, Any]:
     deps.reconfigure()
     log.info("settings updated: %s", ", ".join(sorted(updates)))
     return {"ok": True, "applied": sorted(updates), **_snapshot()}
+
+
+# ----------------------------------------------------- scoring weights
+
+class ScoringUpdate(BaseModel):
+    weights: Dict[str, float] = {}
+    delta_min: Optional[float] = None
+    delta_max: Optional[float] = None
+
+
+@router.get("/scoring-config")
+async def get_scoring_config() -> Dict[str, Any]:
+    cfg = get_deps().config.get("scoring")
+    band = cfg.get("delta_band", {})
+    return {
+        "weights": {k: float(cfg.get("weights", {}).get(k, 0)) for k in WEIGHT_KEYS},
+        "delta_band": {"min": band.get("min"), "max": band.get("max")},
+        "defaults": {
+            "weights": {"delta_fit": 0.2, "extrinsic": 0.15, "spread": 0.15,
+                        "open_interest": 0.1, "volume": 0.1, "iv_rank": 0.1,
+                        "dte_fit": 0.1, "trend_alignment": 0.1},
+            "delta_band": {"min": 0.6, "max": 0.8},
+        },
+    }
+
+
+@router.post("/scoring-config")
+async def update_scoring_config(req: ScoringUpdate) -> Dict[str, Any]:
+    path = CONFIG_DIR / "scoring.json"
+    cfg = json.loads(path.read_text())
+
+    if req.weights:
+        for key, val in req.weights.items():
+            if key not in WEIGHT_KEYS:
+                raise HTTPException(status_code=400, detail=f"unknown weight: {key}")
+            if not isinstance(val, (int, float)) or val < 0 or val > 1000:
+                raise HTTPException(status_code=400, detail=f"{key}: weight must be 0..1000")
+        merged = {**cfg.get("weights", {}), **{k: float(v) for k, v in req.weights.items()}}
+        if sum(merged.get(k, 0) for k in WEIGHT_KEYS) <= 0:
+            raise HTTPException(status_code=400, detail="at least one weight must be > 0")
+        cfg["weights"] = merged
+
+    if req.delta_min is not None or req.delta_max is not None:
+        band = dict(cfg.get("delta_band", {}))
+        lo = req.delta_min if req.delta_min is not None else band.get("min")
+        hi = req.delta_max if req.delta_max is not None else band.get("max")
+        if not (0 < lo <= hi <= 1):
+            raise HTTPException(status_code=400, detail="delta band must satisfy 0 < min <= max <= 1")
+        band["min"], band["max"] = float(lo), float(hi)
+        cfg["delta_band"] = band
+
+    with _env_lock:  # reuse the file lock for atomic-ish writes
+        path.write_text(json.dumps(cfg, indent=2) + "\n")
+    # scoring.json is mtime hot-reloaded; drop cached scans so a re-scan re-scores
+    get_deps().cache.invalidate_prefix("scan:result:")
+    log.info("scoring config updated")
+    return {"ok": True, **(await get_scoring_config())}

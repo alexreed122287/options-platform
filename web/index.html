@@ -1572,13 +1572,95 @@ async function loadSettings() {
     <div class="toolbar">
       <button class="primary" id="set-save" onclick="saveSettings()">Save settings</button>
       <span class="info" id="set-result"></span>
-    </div>`;
+    </div>
+
+    <div class="panel" id="scoring-panel"><h3>Scoring weights</h3>
+      <div class="empty">Loading scoring config...</div></div>`;
 
   // live-warning reacts to broker/env/live changes
   ["set-broker", "set-alpaca_paper", "set-tradier_env", "set-live_trading_enabled"].forEach((id) => {
     const el = $("#" + id);
     if (el) el.addEventListener("change", updateLiveWarn);
   });
+  loadScoring();
+}
+
+const WEIGHT_LABELS = {
+  delta_fit: "Delta fit", extrinsic: "Extrinsic %", spread: "Spread tightness",
+  open_interest: "Open interest", volume: "Volume", iv_rank: "IV rank",
+  dte_fit: "DTE fit", trend_alignment: "Trend / regime",
+};
+
+async function loadScoring() {
+  const panel = $("#scoring-panel");
+  if (!panel) return;
+  let c;
+  try { c = await api("/scoring-config"); }
+  catch (e) { panel.innerHTML = `<h3>Scoring weights</h3><div class="note">${esc(e.message)}</div>`; return; }
+  const sum = Object.values(c.weights).reduce((a, b) => a + b, 0) || 1;
+  const rows = Object.entries(c.weights).map(([k, v]) => `
+    <div class="set-row">
+      <div class="set-label">${WEIGHT_LABELS[k] || k}
+        <div class="set-use">currently ${(v / sum * 100).toFixed(0)}% of total</div></div>
+      <input type="number" id="w-${k}" min="0" max="100" step="0.05" value="${v}"
+             style="width:90px" oninput="updateWeightPct()">
+    </div>`).join("");
+  panel.innerHTML = `
+    <h3>Scoring weights</h3>
+    <div class="set-note">Weights are relative - they're normalized to 100%, so you can use any
+      scale. Raise what matters to you, zero out what doesn't. Saved to config/scoring.json and
+      applied on the next scan.</div>
+    <div class="set-grid">${rows}</div>
+    <div class="set-row">
+      <div class="set-label">Delta band (target |delta|)<div class="set-use">contracts in this range score best</div></div>
+      <span><input type="number" id="w-delta-min" min="0.01" max="1" step="0.05" value="${c.delta_band.min}" style="width:74px">
+        to <input type="number" id="w-delta-max" min="0.01" max="1" step="0.05" value="${c.delta_band.max}" style="width:74px"></span>
+    </div>
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="primary" id="scoring-save" onclick="saveScoring()">Save weights</button>
+      <button class="small" onclick="resetScoring()">Reset to defaults</button>
+      <span class="info" id="scoring-result"></span>
+    </div>`;
+  panel._defaults = c.defaults;
+}
+
+function updateWeightPct() {
+  const vals = Object.keys(WEIGHT_LABELS).map((k) => parseFloat($("#w-" + k)?.value) || 0);
+  const sum = vals.reduce((a, b) => a + b, 0) || 1;
+  Object.keys(WEIGHT_LABELS).forEach((k) => {
+    const v = parseFloat($("#w-" + k)?.value) || 0;
+    const lbl = $("#w-" + k)?.closest(".set-row")?.querySelector(".set-use");
+    if (lbl) lbl.textContent = `currently ${(v / sum * 100).toFixed(0)}% of total`;
+  });
+}
+
+function resetScoring() {
+  const d = $("#scoring-panel")._defaults;
+  if (!d) return;
+  Object.entries(d.weights).forEach(([k, v]) => { if ($("#w-" + k)) $("#w-" + k).value = v; });
+  $("#w-delta-min").value = d.delta_band.min;
+  $("#w-delta-max").value = d.delta_band.max;
+  updateWeightPct();
+}
+
+async function saveScoring() {
+  const btn = $("#scoring-save");
+  btn.disabled = true; btn.textContent = "Saving...";
+  const weights = {};
+  Object.keys(WEIGHT_LABELS).forEach((k) => { weights[k] = parseFloat($("#w-" + k).value) || 0; });
+  const body = { weights, delta_min: parseFloat($("#w-delta-min").value),
+                 delta_max: parseFloat($("#w-delta-max").value) };
+  try {
+    await api("/scoring-config", { method: "POST", body: JSON.stringify(body) });
+    $("#scoring-result").textContent = "Saved. Re-scan to apply.";
+    toast("Scoring weights saved");
+    loadScoring();
+  } catch (e) {
+    $("#scoring-result").textContent = "Failed: " + e.message;
+    toast("Save failed: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Save weights";
+  }
 }
 
 function liveCombo(s) {
