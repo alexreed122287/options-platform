@@ -374,6 +374,7 @@
         <button onclick="trackingUpdate()" id="track-update">Update outcomes</button>
         <span class="info" id="track-info"></span>
       </div>
+      <div class="set-note" id="track-source"></div>
     </div>
     <div class="grid cols3" id="track-summary"></div>
     <div class="panel" style="margin-top:14px;">
@@ -764,7 +765,7 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith("/tracking/update")) return { updated: 18, expired: 2, errors: 0, remaining_open: 0 };
   if (path.startsWith("/tracking/report")) {
     return {
-      total_tracked: 60, with_outcome: 42, open: 18,
+      total_tracked: 60, with_outcome: 42, open: 18, quote_source: "tradier",
       buckets: [
         { range: "0-50", count: 0, avg_option_return: null, avg_underlying_return: null, win_rate: null, avg_days_held: null },
         { range: "50-60", count: 6, avg_option_return: -3.1, avg_underlying_return: -0.4, win_rate: 0.333, avg_days_held: 5.2 },
@@ -1766,6 +1767,10 @@ async function saveSettings() {
 async function loadValidation() {
   try {
     const rep = await api("/tracking/report");
+    if (rep.quote_source) {
+      $("#track-source").textContent =
+        `Marks (entry + re-quote) via ${rep.quote_source} for a consistent, accurate comparison.`;
+    }
     $("#track-summary").innerHTML = [
       ["Tracked entries", rep.total_tracked],
       ["With an outcome", rep.with_outcome],

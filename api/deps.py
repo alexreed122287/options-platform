@@ -81,6 +81,13 @@ class Deps:
         self.alerts.tracker = self.tracker   # daily auto-snapshot
         self.reconfigure()
 
+    def _tracker_quote_source(self):
+        """Best mark source for the forward test: prefer Tradier (real quotes +
+        ORATS greeks) when configured, else the active broker."""
+        if self.tradier.configured:
+            return self.tradier
+        return self.broker
+
     def reconfigure(self) -> None:
         """(Re)resolve broker and data source from env and repoint the engines.
         Called at startup and after a Settings change so key/broker/data-source
@@ -103,7 +110,7 @@ class Deps:
         self.scanner.market_data = self.market_data
         self.alerts.market_data = self.market_data
         if hasattr(self, "tracker"):
-            self.tracker.broker = self.broker
+            self.tracker.quotes = self._tracker_quote_source()
         self.cache.invalidate_prefix("scan:result:")
         self.cache.invalidate_prefix("scan:prefilter:")
         self.cache.invalidate("regime:result")

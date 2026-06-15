@@ -26,21 +26,46 @@ BUCKETS = [(0, 50), (50, 60), (60, 70), (70, 80), (80, 90), (90, 1000)]
 
 
 class ScoreTracker:
-    def __init__(self, scanner, broker, cache):
+    def __init__(self, scanner, quotes, cache):
         self.scanner = scanner
-        self.broker = broker
+        self.quotes = quotes        # mark source for entry AND re-quotes (set by deps)
         self.cache = cache
+
+    @property
+    def quote_source(self) -> str:
+        return getattr(self.quotes, "name", "broker")
 
     async def snapshot(self, top_n: int = 25, sector: Optional[str] = None,
                        theme: Optional[str] = None, dte: Optional[str] = None) -> Dict[str, Any]:
         """Record today's top-N scored contracts as forward-test entries
-        (deduped per contract per ET day)."""
+        (deduped per contract per ET day). Entry marks are taken from the
+        tracker's quote source so they match the later re-quotes (no
+        feed-mismatch noise); falls back to the scan's mid/spot if that
+        source can't quote a contract."""
         scan = await self.scanner.scan(sector=sector, theme=theme, dte=dte)
         results = sorted(scan.get("results", []), key=lambda r: r["score"], reverse=True)[:top_n]
         now = dt.datetime.now(ET)
         today = now.date().isoformat()
+        spot_cache: Dict[str, Optional[float]] = {}
         inserted = 0
         for r in results:
+            occ = r["occ_symbol"]
+            entry_mid = r.get("mid")
+            entry_spot = r.get("spot")
+            try:  # consistent entry mark from the tracker's own source
+                q = await self.quotes.option_latest_quote(occ)
+                if q.get("mid"):
+                    entry_mid = q["mid"]
+            except ProviderError:
+                pass
+            und = r.get("underlying")
+            if und:
+                if und not in spot_cache:
+                    try:
+                        spot_cache[und] = (await self.quotes.stock_snapshot(und)).data.get("price")
+                    except ProviderError:
+                        spot_cache[und] = None
+                entry_spot = spot_cache[und] or entry_spot
             n = db.execute_rc(
                 """
                 INSERT OR IGNORE INTO score_tracking
@@ -48,13 +73,15 @@ class ScoreTracker:
                    dte, delta, score, entry_mid, entry_spot, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
                 """,
-                (today, now.isoformat(timespec="seconds"), r["occ_symbol"],
-                 r.get("underlying"), r.get("expiration"), r.get("dte"),
-                 r.get("delta"), r.get("score"), r.get("mid"), r.get("spot")),
+                (today, now.isoformat(timespec="seconds"), occ,
+                 und, r.get("expiration"), r.get("dte"),
+                 r.get("delta"), r.get("score"), entry_mid, entry_spot),
             )
             inserted += n
-        log.info("score snapshot: %d new entries (top %d)", inserted, top_n)
-        return {"snapshot_date": today, "candidates": len(results), "new_entries": inserted}
+        log.info("score snapshot: %d new entries (top %d) via %s",
+                 inserted, top_n, self.quote_source)
+        return {"snapshot_date": today, "candidates": len(results),
+                "new_entries": inserted, "quote_source": self.quote_source}
 
     async def update_outcomes(self, limit: int = 250) -> Dict[str, Any]:
         """Re-quote open tracked contracts and record realized returns. Marks
@@ -70,7 +97,7 @@ class ScoreTracker:
         for row in rows:
             occ = row["occ_symbol"]
             try:
-                quote = await self.broker.option_latest_quote(occ)
+                quote = await self.quotes.option_latest_quote(occ)
                 current_mid = quote.get("mid")
             except ProviderError as exc:
                 errors += 1
@@ -79,7 +106,7 @@ class ScoreTracker:
             underlying = row.get("underlying")
             if underlying and underlying not in spot_cache:
                 try:
-                    snap = await self.broker.stock_snapshot(underlying)
+                    snap = await self.quotes.stock_snapshot(underlying)
                     spot_cache[underlying] = snap.data.get("price")
                 except ProviderError:
                     spot_cache[underlying] = None
@@ -158,6 +185,7 @@ class ScoreTracker:
             "total_tracked": totals["total"] or 0,
             "with_outcome": totals["with_outcome"] or 0,
             "open": totals["open_n"] or 0,
+            "quote_source": self.quote_source,
         }
 
     def recent(self, limit: int = 100) -> List[Dict[str, Any]]:
