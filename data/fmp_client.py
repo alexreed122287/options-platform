@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .base import BaseClient, ProviderError
 from .cache import Fetched, RateBudget, TTLCache
+from .creds import cred
 from .env import env, secret
 
 log = logging.getLogger("data.fmp")
@@ -58,13 +59,13 @@ class FMPClient(BaseClient):
 
     @property
     def configured(self) -> bool:
-        return bool(secret("FMP_API_KEY"))
+        return bool(cred("FMP_API_KEY"))
 
     async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         if not self.configured:
             raise ProviderError("fmp: FMP_API_KEY not set in .env")
         merged = dict(params or {})
-        merged["apikey"] = secret("FMP_API_KEY")
+        merged["apikey"] = cred("FMP_API_KEY")
         return await self._request_json("GET", f"{self.base}{path}", params=merged)
 
     async def _get_with_fallback(

@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import BaseClient, ProviderError
 from .cache import Fetched, RateBudget, TTLCache
+from .creds import cred, cred_bool
 from .env import env, env_bool, secret
 
 log = logging.getLogger("data.alpaca")
@@ -50,11 +51,11 @@ class AlpacaClient(BaseClient):
 
     @property
     def configured(self) -> bool:
-        return bool(secret("ALPACA_API_KEY")) and bool(secret("ALPACA_SECRET_KEY"))
+        return bool(cred("ALPACA_API_KEY")) and bool(cred("ALPACA_SECRET_KEY"))
 
     @property
     def paper(self) -> bool:
-        return env_bool("ALPACA_PAPER", True)
+        return cred_bool("ALPACA_PAPER", True)
 
     @property
     def trading_base(self) -> str:
@@ -64,8 +65,8 @@ class AlpacaClient(BaseClient):
         if not self.configured:
             raise ProviderError("alpaca: ALPACA_API_KEY / ALPACA_SECRET_KEY not set in .env")
         return {
-            "APCA-API-KEY-ID": secret("ALPACA_API_KEY") or "",
-            "APCA-API-SECRET-KEY": secret("ALPACA_SECRET_KEY") or "",
+            "APCA-API-KEY-ID": cred("ALPACA_API_KEY") or "",
+            "APCA-API-SECRET-KEY": cred("ALPACA_SECRET_KEY") or "",
             "Accept": "application/json",
         }
 

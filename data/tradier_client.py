@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import BaseClient, ProviderError
 from .cache import Fetched, RateBudget, TTLCache
+from .creds import cred
 from .env import env, secret
 
 log = logging.getLogger("data.tradier")
@@ -115,11 +116,11 @@ class TradierClient(BaseClient):
 
     @property
     def configured(self) -> bool:
-        return bool(secret("TRADIER_ACCESS_TOKEN"))
+        return bool(cred("TRADIER_ACCESS_TOKEN"))
 
     @property
     def environment(self) -> str:
-        return (env("TRADIER_ENV", "production") or "production").lower()
+        return (cred("TRADIER_ENV") or "production").lower()
 
     @property
     def paper(self) -> bool:
@@ -134,7 +135,7 @@ class TradierClient(BaseClient):
         if not self.configured:
             raise ProviderError("tradier: TRADIER_ACCESS_TOKEN not set in .env")
         return {
-            "Authorization": f"Bearer {secret('TRADIER_ACCESS_TOKEN')}",
+            "Authorization": f"Bearer {cred('TRADIER_ACCESS_TOKEN')}",
             "Accept": "application/json",
         }
 
@@ -151,7 +152,7 @@ class TradierClient(BaseClient):
     # -------------------------------------------------------------- account
 
     async def _account_id(self) -> str:
-        override = env("TRADIER_ACCOUNT_ID")
+        override = cred("TRADIER_ACCOUNT_ID")
         if override:
             return override
         if self._account_id_cached:

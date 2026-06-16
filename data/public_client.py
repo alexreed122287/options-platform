@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import BaseClient, ProviderError, register_secret
 from .cache import Fetched, RateBudget, TTLCache
+from .creds import cred
 from .env import env, secret
 
 log = logging.getLogger("data.public")
@@ -143,7 +144,7 @@ class PublicClient(BaseClient):
 
     @property
     def configured(self) -> bool:
-        return bool(secret("PUBLIC_API_SECRET"))
+        return bool(cred("PUBLIC_API_SECRET"))
 
     @property
     def paper(self) -> bool:
@@ -163,7 +164,7 @@ class PublicClient(BaseClient):
             resp = await self._request_json(
                 "POST", f"{BASE}/userapiauthservice/personal/access-tokens",
                 json_body={"validityInMinutes": validity,
-                           "secret": secret("PUBLIC_API_SECRET")},
+                           "secret": cred("PUBLIC_API_SECRET")},
             )
             token = resp.get("accessToken") if isinstance(resp, dict) else None
             if not token:
@@ -200,7 +201,7 @@ class PublicClient(BaseClient):
     # -------------------------------------------------------------- account
 
     async def _account_id(self) -> str:
-        override = env("PUBLIC_ACCOUNT_ID")
+        override = cred("PUBLIC_ACCOUNT_ID")
         if override:
             return override
         if self._account_id_cached:
