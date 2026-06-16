@@ -305,6 +305,8 @@
           <option value="50">Top 50</option>
           <option value="0">All</option>
         </select>
+        <button class="small" id="copy-tickers" onclick="copyTickers()"
+                title="Copy the result tickers as a comma-separated list for TradingView">Copy tickers</button>
         <span class="info" id="recs-info"></span>
       </div>
       <div class="legend">
@@ -987,6 +989,52 @@ function setView(view) {
 function setFlatLimit() {
   flatLimit = parseInt($("#flat-limit").value, 10);
   renderRecs();
+}
+
+// Copy works over https/localhost via the Clipboard API, and falls back to a
+// hidden textarea + execCommand for plain-http (LAN) where the API is blocked.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);   // https / localhost (e.g. ngrok)
+      return true;
+    }
+  } catch (e) { /* fall through to legacy path (plain-http LAN) */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.contentEditable = "true";
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    if (/ipad|iphone|ipod/i.test(navigator.userAgent)) {
+      // iOS Safari needs an explicit selection range, not just .select()
+      const range = document.createRange();
+      range.selectNodeContents(ta);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ta.setSelectionRange(0, text.length);
+    } else {
+      ta.focus();
+      ta.select();
+    }
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
+async function copyTickers() {
+  if (!recsData) return;
+  // unique tickers from the current scan (respects the active sector/theme/DTE
+  // filter), ranked best-first - the grouped set is already deduped by ticker
+  const tickers = [...new Set(recGroups(recsData).map((g) => g.underlying))].filter(Boolean);
+  if (!tickers.length) { toast("No tickers to copy", true); return; }
+  const list = tickers.join(",");
+  const ok = await copyText(list);
+  if (ok) toast(`Copied ${tickers.length} tickers - paste into TradingView`);
+  else window.prompt("Copy these tickers for TradingView:", list);
 }
 
 async function loadRecs(refresh = false) {
