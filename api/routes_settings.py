@@ -177,24 +177,36 @@ async def update_settings(req: SettingsUpdate) -> Dict[str, Any]:
 
 # ----------------------------------------------------- scoring weights
 
+# numeric filters - null/blank means "no filter"
+FILTER_NUM_KEYS = ("min_open_interest", "min_volume", "max_spread_pct",
+                   "min_mid", "price_min", "price_max")
+
+
 class ScoringUpdate(BaseModel):
     weights: Dict[str, float] = {}
     delta_min: Optional[float] = None
     delta_max: Optional[float] = None
+    filters: Optional[Dict[str, Any]] = None
 
 
 @router.get("/scoring-config")
 async def get_scoring_config() -> Dict[str, Any]:
     cfg = get_deps().config.get("scoring")
     band = cfg.get("delta_band", {})
+    f = cfg.get("filters", {})
     return {
         "weights": {k: float(cfg.get("weights", {}).get(k, 0)) for k in WEIGHT_KEYS},
         "delta_band": {"min": band.get("min"), "max": band.get("max")},
+        "filters": {
+            **{k: f.get(k) for k in FILTER_NUM_KEYS},
+            "require_greeks": bool(f.get("require_greeks", True)),
+        },
         "defaults": {
             "weights": {"delta_fit": 0.2, "extrinsic": 0.15, "spread": 0.15,
                         "open_interest": 0.1, "volume": 0.1, "iv_rank": 0.1,
                         "dte_fit": 0.1, "trend_alignment": 0.1},
             "delta_band": {"min": 0.6, "max": 0.8},
+            "filters": {k: None for k in FILTER_NUM_KEYS},
         },
     }
 
@@ -223,6 +235,25 @@ async def update_scoring_config(req: ScoringUpdate) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail="delta band must satisfy 0 < min <= max <= 1")
         band["min"], band["max"] = float(lo), float(hi)
         cfg["delta_band"] = band
+
+    if req.filters is not None:
+        flt = dict(cfg.get("filters", {}))
+        for key, val in req.filters.items():
+            if key == "require_greeks":
+                flt["require_greeks"] = bool(val)
+                continue
+            if key not in FILTER_NUM_KEYS:
+                raise HTTPException(status_code=400, detail=f"unknown filter: {key}")
+            if val is None or val == "":
+                flt[key] = None                       # blank = no filter
+            elif isinstance(val, (int, float)) and val >= 0:
+                flt[key] = float(val)
+            else:
+                raise HTTPException(status_code=400, detail=f"{key}: must be a number >= 0 or blank")
+        pmin, pmax = flt.get("price_min"), flt.get("price_max")
+        if pmin is not None and pmax is not None and pmin > pmax:
+            raise HTTPException(status_code=400, detail="price_min cannot exceed price_max")
+        cfg["filters"] = flt
 
     with _env_lock:  # reuse the file lock for atomic-ish writes
         path.write_text(json.dumps(cfg, indent=2) + "\n")

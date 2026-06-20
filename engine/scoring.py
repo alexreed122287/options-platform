@@ -182,19 +182,25 @@ def prefilter_rank(quotes: Dict[str, Dict[str, Any]], cfg: Dict[str, Any]) -> Li
 def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     f = cfg["filters"]
     mid = contract.get("mid")
-    if mid is None or mid < f["min_mid"]:
-        return False, "no quote or mid below min_mid"
+    # Baseline: a contract must have a tradeable quote and (optionally) greeks
+    # so it can be priced and scored - this is not a tunable "requirement".
+    if mid is None or mid <= 0:
+        return False, "no live quote"
     if (contract.get("bid") or 0) <= 0 or (contract.get("ask") or 0) <= 0:
-        return False, "missing bid/ask"
+        return False, "no bid/ask"
     if f.get("require_greeks", True) and contract.get("delta") is None:
         return False, "missing greeks"
-    if (contract.get("open_interest") or 0) < f["min_open_interest"]:
+    # Optional tunable filters: null/blank means skip (nothing ruled out).
+    if f.get("min_mid") is not None and mid < f["min_mid"]:
+        return False, "mid below minimum"
+    if f.get("min_open_interest") is not None and (contract.get("open_interest") or 0) < f["min_open_interest"]:
         return False, "open interest below minimum"
-    if (contract.get("volume") or 0) < f["min_volume"]:
+    if f.get("min_volume") is not None and (contract.get("volume") or 0) < f["min_volume"]:
         return False, "volume below minimum"
-    spr = spread_pct(contract)
-    if spr is None or spr > f["max_spread_pct"]:
-        return False, "spread too wide"
+    if f.get("max_spread_pct") is not None:
+        spr = spread_pct(contract)
+        if spr is None or spr > f["max_spread_pct"]:
+            return False, "spread too wide"
     return True, None
 
 
@@ -309,6 +315,15 @@ class Scanner:
                 if not spot:
                     return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                             "stale": stale, "error": "no spot price"}
+
+                # underlying price filter (skip the whole ticker before the
+                # expensive chain fetch if its share price is out of range)
+                flt = cfg.get("filters", {})
+                pmin, pmax = flt.get("price_min"), flt.get("price_max")
+                if (pmin is not None and spot < pmin) or (pmax is not None and spot > pmax):
+                    return {"symbol": symbol, "rows": [], "scanned": 0,
+                            "dropped": {"underlying price out of range": 1},
+                            "stale": stale, "error": None}
 
                 # Trend: data-source bars first, FMP history as fallback
                 # (Public has no bars endpoint at all).

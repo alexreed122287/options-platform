@@ -182,7 +182,7 @@ def test_filters_reject_wide_spread():
 
 def test_filters_reject_tiny_mid():
     ok, reason = S.passes_filters(make_contract(bid=0.05, ask=0.15, mid=0.10), CFG)
-    assert not ok and reason == "no quote or mid below min_mid"
+    assert not ok and reason == "mid below minimum"
 
 
 def test_filters_reject_missing_greeks():
@@ -193,6 +193,25 @@ def test_filters_reject_missing_greeks():
 def test_filters_accept_good_contract():
     ok, reason = S.passes_filters(make_contract(), CFG)
     assert ok and reason is None
+
+
+def test_filters_optional_when_blank():
+    # null/blank filters are skipped - a low-OI, wide-spread, cheap contract
+    # passes when the liquidity/spread/min_mid filters are all off
+    cfg = {**CFG, "filters": {
+        "min_open_interest": None, "min_volume": None, "max_spread_pct": None,
+        "min_mid": None, "require_greeks": True,
+    }}
+    ok, reason = S.passes_filters(
+        make_contract(open_interest=1, volume=0, bid=0.10, ask=0.30, mid=0.20), cfg)
+    assert ok and reason is None
+
+
+def test_filters_still_require_a_quote():
+    # baseline quote requirement holds even with all filters blank
+    cfg = {**CFG, "filters": {"require_greeks": True}}
+    ok, reason = S.passes_filters(make_contract(bid=0, ask=0, mid=None), cfg)
+    assert not ok and reason == "no live quote"
 
 
 # ------------------------------------------------------- composite score

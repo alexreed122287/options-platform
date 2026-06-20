@@ -1720,12 +1720,60 @@ async function loadScoring() {
       <span><input type="number" id="w-delta-min" min="0.01" max="1" step="0.05" value="${c.delta_band.min}" style="width:74px">
         to <input type="number" id="w-delta-max" min="0.01" max="1" step="0.05" value="${c.delta_band.max}" style="width:74px"></span>
     </div>
+
+    <h3 style="margin-top:18px;">Filters</h3>
+    <div class="set-note">Each filter is optional - <strong>leave it blank to apply no filter</strong>
+      (nothing ruled out; the scoring weights still rank these traits). A live quote and greeks are
+      always required so a contract can be priced and scored.</div>
+    <div class="set-grid">${filterFields(c.filters)}</div>
+
     <div class="toolbar" style="margin-top:10px;">
-      <button class="primary" id="scoring-save" onclick="saveScoring()">Save weights</button>
+      <button class="primary" id="scoring-save" onclick="saveScoring()">Save scoring + filters</button>
       <button class="small" onclick="resetScoring()">Reset to defaults</button>
       <span class="info" id="scoring-result"></span>
     </div>`;
   panel._defaults = c.defaults;
+}
+
+const FILTER_NUM = ["price_min", "price_max", "min_open_interest", "min_volume", "min_mid"];
+
+function filterFields(f) {
+  f = f || {};
+  const row = (id, label, hint, value, step) => `
+    <div class="set-row">
+      <div class="set-label">${label}<div class="set-use">${hint}</div></div>
+      <input type="number" id="f-${id}" min="0" step="${step}"
+             value="${value === null || value === undefined ? "" : value}"
+             placeholder="off" style="width:120px"></div>`;
+  const spreadVal = f.max_spread_pct == null ? "" : +(f.max_spread_pct * 100).toFixed(2);
+  return [
+    row("price_min", "Underlying price min ($)", "only stocks at/above this share price", f.price_min, "0.01"),
+    row("price_max", "Underlying price max ($)", "only stocks at/below this share price", f.price_max, "0.01"),
+    row("min_open_interest", "Min open interest", "liquidity floor - blank ignores it", f.min_open_interest, "1"),
+    row("min_volume", "Min volume (today)", "blank ignores volume", f.min_volume, "1"),
+    `<div class="set-row"><div class="set-label">Max bid/ask spread (%)
+       <div class="set-use">tightness cap - blank ignores it</div></div>
+       <input type="number" id="f-max_spread_pct" min="0" step="0.5" value="${spreadVal}"
+              placeholder="off" style="width:120px"></div>`,
+    row("min_mid", "Min option price (mid $)", "blank allows any priced contract", f.min_mid, "0.01"),
+    `<div class="set-row"><div class="set-label">Require greeks
+       <div class="set-use">needed to score delta/IV - leave on</div></div>
+       <select id="f-require_greeks" style="width:120px">
+         <option value="true" ${f.require_greeks ? "selected" : ""}>yes</option>
+         <option value="false" ${f.require_greeks ? "" : "selected"}>no</option></select></div>`,
+  ].join("");
+}
+
+function collectFilters() {
+  const filters = {};
+  FILTER_NUM.forEach((k) => {
+    const v = ($("#f-" + k)?.value || "").trim();
+    filters[k] = v === "" ? null : parseFloat(v);
+  });
+  const spr = ($("#f-max_spread_pct")?.value || "").trim();
+  filters.max_spread_pct = spr === "" ? null : parseFloat(spr) / 100;  // % -> fraction
+  filters.require_greeks = $("#f-require_greeks")?.value === "true";
+  return filters;
 }
 
 function updateWeightPct() {
@@ -1744,6 +1792,9 @@ function resetScoring() {
   Object.entries(d.weights).forEach(([k, v]) => { if ($("#w-" + k)) $("#w-" + k).value = v; });
   $("#w-delta-min").value = d.delta_band.min;
   $("#w-delta-max").value = d.delta_band.max;
+  // filters default blank (no filter)
+  [...FILTER_NUM, "max_spread_pct"].forEach((k) => { if ($("#f-" + k)) $("#f-" + k).value = ""; });
+  if ($("#f-require_greeks")) $("#f-require_greeks").value = "true";
   updateWeightPct();
 }
 
@@ -1753,11 +1804,11 @@ async function saveScoring() {
   const weights = {};
   Object.keys(WEIGHT_LABELS).forEach((k) => { weights[k] = parseFloat($("#w-" + k).value) || 0; });
   const body = { weights, delta_min: parseFloat($("#w-delta-min").value),
-                 delta_max: parseFloat($("#w-delta-max").value) };
+                 delta_max: parseFloat($("#w-delta-max").value), filters: collectFilters() };
   try {
     await api("/scoring-config", { method: "POST", body: JSON.stringify(body) });
     $("#scoring-result").textContent = "Saved. Re-scan to apply.";
-    toast("Scoring weights saved");
+    toast("Scoring + filters saved");
     loadScoring();
   } catch (e) {
     $("#scoring-result").textContent = "Failed: " + e.message;

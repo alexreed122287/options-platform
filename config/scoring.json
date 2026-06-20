@@ -15,8 +15,8 @@
   },
   "delta_band": {
     "_doc": "Target |delta| range. 1.0 inside, linear falloff to 0 over `falloff` outside.",
-    "min": 0.6,
-    "max": 0.8,
+    "min": 0.65,
+    "max": 0.85,
     "falloff": 0.15
   },
   "dte_band": {
@@ -94,11 +94,14 @@
     "regime_weight": 0.4
   },
   "filters": {
-    "min_open_interest": 50,
-    "min_volume": 0,
-    "max_spread_pct": 0.15,
-    "min_mid": 0.2,
-    "require_greeks": true
+    "_doc": "Optional hard filters - null/blank means NO filter (nothing ruled out); the scoring weights still rank these traits. A tradeable quote (positive bid/ask/mid) and greeks are always required so a contract can be priced and scored. price_min/price_max filter by the UNDERLYING share price.",
+    "min_open_interest": null,
+    "min_volume": null,
+    "max_spread_pct": null,
+    "min_mid": null,
+    "require_greeks": true,
+    "price_min": null,
+    "price_max": null
   },
   "chain_window": {
     "_doc": "Strike window fetched per underlying relative to spot; expiry window is the dte band padded by falloff_days.",
