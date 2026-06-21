@@ -36,13 +36,13 @@ class ScoreTracker:
         return getattr(self.quotes, "name", "broker")
 
     async def snapshot(self, top_n: int = 25, sector: Optional[str] = None,
-                       theme: Optional[str] = None, dte: Optional[str] = None) -> Dict[str, Any]:
+                       themes: Optional[List[str]] = None, dte: Optional[str] = None) -> Dict[str, Any]:
         """Record today's top-N scored contracts as forward-test entries
         (deduped per contract per ET day). Entry marks are taken from the
         tracker's quote source so they match the later re-quotes (no
         feed-mismatch noise); falls back to the scan's mid/spot if that
         source can't quote a contract."""
-        scan = await self.scanner.scan(sector=sector, theme=theme, dte=dte)
+        scan = await self.scanner.scan(sector=sector, themes=themes, dte=dte)
         results = sorted(scan.get("results", []), key=lambda r: r["score"], reverse=True)[:top_n]
         now = dt.datetime.now(ET)
         today = now.date().isoformat()

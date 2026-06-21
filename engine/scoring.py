@@ -383,20 +383,26 @@ class Scanner:
                 return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                         "stale": False, "error": str(exc)}
 
-    def _filtered_universe(self, sector: Optional[str], theme: Optional[str]) -> List[str]:
+    def _filtered_universe(self, sector: Optional[str],
+                           themes: Optional[List[str]]) -> List[str]:
         universe = self.config.get("universe")["tickers"]
         segs = self.config.get("segments")
         if sector:
             sof = segs.get("sector_of", {})
             universe = [t for t in universe if sof.get(t) == sector]
-        if theme:
-            members = set(segs.get("themes", {}).get(theme, []))
+        active_themes = [t for t in (themes or []) if t]
+        if active_themes:
+            theme_tickers = segs.get("themes", {})
+            members: set = set()
+            for th in active_themes:
+                members |= set(theme_tickers.get(th, []))
             universe = [t for t in universe if t in members]
         return universe
 
     @staticmethod
-    def _seg_key(sector: Optional[str], theme: Optional[str]) -> str:
-        return f"{sector or 'all'}|{theme or 'all'}"
+    def _seg_key(sector: Optional[str], themes: Optional[List[str]]) -> str:
+        active = sorted(t for t in (themes or []) if t)
+        return f"{sector or 'all'}|{','.join(active) or 'all'}"
 
     def _resolve_dte_band(self, cfg: Dict[str, Any], dte_preset: Optional[str]) -> Dict[str, Any]:
         """The active DTE target: a named preset overrides the default dte_band
@@ -454,18 +460,22 @@ class Scanner:
         info.update({"prefiltered": True, "ranked": len(universe), "scanned": len(top)})
         return top, info
 
-    async def _scan_now(self, sector: Optional[str] = None, theme: Optional[str] = None,
+    async def _scan_now(self, sector: Optional[str] = None,
+                        themes: Optional[List[str]] = None,
                         dte_preset: Optional[str] = None) -> Dict[str, Any]:
         base_cfg = self.config.get("scoring")
         dte_band = self._resolve_dte_band(base_cfg, dte_preset)
         cfg = {**base_cfg, "dte_band": dte_band}   # DTE filter applied here
-        universe = self._filtered_universe(sector, theme)
+        universe = self._filtered_universe(sector, themes)
         settings = self.config.get("settings")
         sector_of = self.config.get("segments").get("sector_of", {})
         regime = await self.regime.compute()
         regime01 = regime["score"] / 100.0
-        seg = {"sector": sector, "theme": theme, "dte": dte_preset or "default",
-               "dte_band": dte_band}
+        active_themes = [t for t in (themes or []) if t]
+        seg = {"sector": sector,
+               "theme": active_themes[0] if len(active_themes) == 1 else (active_themes or None),
+               "themes": active_themes,
+               "dte": dte_preset or "default", "dte_band": dte_band}
 
         if not universe:
             return {
@@ -478,7 +488,7 @@ class Scanner:
                 "stale": bool(regime.get("stale")),
             }
 
-        scan_list, prefilter_info = await self._prefilter(universe, self._seg_key(sector, theme))
+        scan_list, prefilter_info = await self._prefilter(universe, self._seg_key(sector, themes))
 
         sem = asyncio.Semaphore(int(settings["scan"].get("concurrency", 3)))
         per_ticker = await asyncio.gather(
@@ -537,14 +547,17 @@ class Scanner:
         }
 
     async def scan(self, refresh: bool = False, sector: Optional[str] = None,
-                   theme: Optional[str] = None, dte: Optional[str] = None) -> Dict[str, Any]:
+                   themes: Optional[List[str]] = None, dte: Optional[str] = None,
+                   # legacy single-theme compat
+                   theme: Optional[str] = None) -> Dict[str, Any]:
+        effective_themes = themes or ([theme] if theme else None)
         ttl = self.config.get("settings")["cache_ttls_seconds"]["scan"]
         # result cache is per (segment + DTE); the prefilter cache (inside
         # _scan_now) is keyed by segment only, so it is reused across DTE presets
-        cache_key = f"scan:result:{self._seg_key(sector, theme)}|{dte or 'default'}"
+        cache_key = f"scan:result:{self._seg_key(sector, effective_themes)}|{dte or 'default'}"
 
         async def _compute() -> Dict[str, Any]:
-            return await self._scan_now(sector, theme, dte)
+            return await self._scan_now(sector, effective_themes, dte)
 
         if refresh:
             result = await _compute()

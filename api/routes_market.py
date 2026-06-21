@@ -1,6 +1,6 @@
 """Market-facing routes: health, regime, watchlist, segments."""
 import datetime as dt
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -55,7 +55,7 @@ async def regime_history(limit: int = Query(30, ge=1, le=365)):
 async def recommendations(
     refresh: bool = Query(False),
     sector: Optional[str] = Query(None),
-    theme: Optional[str] = Query(None),
+    theme: List[str] = Query(default=[]),
     dte: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     deps = get_deps()
@@ -63,14 +63,17 @@ async def recommendations(
     # validate against known segments so a typo can't silently scan nothing
     if sector and sector not in set((segs.get("sector_of") or {}).values()):
         raise HTTPException(status_code=400, detail=f"unknown sector: {sector}")
-    if theme and theme not in (segs.get("themes") or {}):
-        raise HTTPException(status_code=400, detail=f"unknown theme: {theme}")
+    known_themes = segs.get("themes") or {}
+    for th in theme:
+        if th and th not in known_themes:
+            raise HTTPException(status_code=400, detail=f"unknown theme: {th}")
     if dte:
         valid = {o["key"] for o in deps.config.get("scoring").get("dte_presets", {}).get("options", [])}
         if dte not in valid:
             raise HTTPException(status_code=400, detail=f"unknown dte preset: {dte}")
+    active_themes = [t for t in theme if t] or None
     return await deps.scanner.scan(
-        refresh=refresh, sector=sector or None, theme=theme or None, dte=dte or None
+        refresh=refresh, sector=sector or None, themes=active_themes, dte=dte or None
     )
 
 

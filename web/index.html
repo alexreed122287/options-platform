@@ -183,6 +183,43 @@
   .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
   a { color: var(--accent); }
 
+  /* theme multi-select */
+  .theme-ms { position: relative; display: inline-block; }
+  .theme-ms-btn {
+    max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; height: 32px;
+  }
+  .theme-ms-btn.active { border-color: var(--accent); color: var(--accent); }
+  .theme-ms-panel {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    width: 270px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .theme-ms-search {
+    width: calc(100% - 16px); margin: 8px; display: block; box-sizing: border-box;
+  }
+  .theme-ms-list { max-height: 210px; overflow-y: auto; padding: 0 8px 4px; }
+  .theme-ms-item {
+    display: flex; align-items: center; gap: 7px; padding: 3px 2px;
+    font-size: 12.5px; cursor: pointer; border-radius: 4px;
+  }
+  .theme-ms-item:hover { background: var(--panel2); }
+  .theme-ms-item.hidden { display: none; }
+  .theme-ms-item input[type=checkbox] { flex-shrink: 0; accent-color: var(--accent); }
+  .theme-ms-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px; border-top: 1px solid var(--border);
+  }
+
+  /* scoring presets */
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .preset-btn {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
   /* settings */
   .set-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .set-row:last-child { border-bottom: none; }
@@ -288,9 +325,19 @@
         <select id="filter-sector" onchange="onFilterChange()" title="Segment by sector">
           <option value="">All sectors</option>
         </select>
-        <select id="filter-theme" onchange="onFilterChange()" title="Segment by Finviz theme">
-          <option value="">All themes</option>
-        </select>
+        <div class="theme-ms" id="theme-ms-wrap">
+          <button type="button" class="theme-ms-btn" id="theme-ms-btn"
+                  onclick="toggleThemeMs(event)" title="Segment by Finviz themes">All themes</button>
+          <div class="theme-ms-panel hidden" id="theme-ms-panel">
+            <input type="search" class="theme-ms-search" id="theme-ms-search"
+                   placeholder="Search 408 themes..." oninput="filterThemeMs()" autocomplete="off">
+            <div class="theme-ms-list" id="theme-ms-list"></div>
+            <div class="theme-ms-foot">
+              <button class="small" type="button" onclick="clearThemeMs()">Clear</button>
+              <span id="theme-ms-count" class="mut" style="font-size:11.5px"></span>
+            </div>
+          </div>
+        </div>
         <select id="filter-dte" onchange="onFilterChange()" title="Target days to expiry">
           <option value="">DTE: default</option>
         </select>
@@ -671,11 +718,14 @@ async function demoApi(path, opts = {}) {
   }
   if (path.startsWith("/recommendations")) {
     const params = new URLSearchParams((path.split("?")[1]) || "");
-    const sector = params.get("sector"), theme = params.get("theme"), dte = params.get("dte");
+    const sector = params.get("sector"), themes = params.getAll("theme"), dte = params.get("dte");
     const dteBand = dte ? DEMO_DTE_PRESETS.find((p) => p.key === dte) : null;
     let recs = d.recs;
     if (sector) recs = recs.filter((r) => DEMO_SECTOR[r.underlying] === sector);
-    if (theme) recs = recs.filter((r) => (DEMO_THEMES[theme] || []).includes(r.underlying));
+    if (themes.length) {
+      const members = new Set(themes.flatMap((t) => DEMO_THEMES[t] || []));
+      recs = recs.filter((r) => members.has(r.underlying));
+    }
     if (dteBand) recs = recs.filter((r) => r.dte >= dteBand.min && r.dte <= dteBand.max);
     const map = {};
     [...recs].sort((a, b) => b.score - a.score).forEach((r) => {
@@ -687,10 +737,12 @@ async function demoApi(path, opts = {}) {
       count: contracts.length, contracts,
     })).sort((a, b) => b.best_score - a.best_score);
     const results = groups.flatMap((g) => g.contracts);
-    const fullUniverse = sector || theme ? Math.max(40, results.length * 9) : 3175;
+    const fullUniverse = sector || themes.length ? Math.max(40, results.length * 9) : 3175;
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
              universe_size: fullUniverse, tickers_scanned: Math.min(40, groups.length || 40),
-             segment: { sector: sector || null, theme: theme || null,
+             segment: { sector: sector || null,
+                        themes: themes.length ? themes : null,
+                        theme: themes.length === 1 ? themes[0] : null,
                         dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null },
              prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
              contracts_scanned: 412, contracts_kept: results.length,
@@ -920,7 +972,7 @@ async function loadRegime() {
 /* ---------------------------- recommendations -------------------------- */
 
 let recsData = null;
-let recsFilter = { sector: "", theme: "", dte: "" };
+let recsFilter = { sector: "", themes: [], dte: "" };
 let segmentsLoaded = false;
 let recsSort = { key: "score", dir: -1 };
 let recsView = "grouped";    // "grouped" (by ticker) or "flat" (all contracts)
@@ -947,11 +999,22 @@ async function loadSegments() {
       o.value = x.name; o.textContent = `${x.name} (${x.count})`;
       secSel.appendChild(o);
     });
-    const themeSel = $("#filter-theme");
+    const msList = $("#theme-ms-list");
+    msList.innerHTML = "";
     (s.themes || []).forEach((x) => {
-      const o = document.createElement("option");
-      o.value = x.name; o.textContent = `${x.name} (${x.count})`;
-      themeSel.appendChild(o);
+      const lbl = document.createElement("label");
+      lbl.className = "theme-ms-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = x.name;
+      cb.addEventListener("change", onThemeMsChange);
+      lbl.appendChild(cb);
+      const txt = document.createElement("span");
+      txt.textContent = `${x.name} `;
+      const cnt = document.createElement("span");
+      cnt.className = "mut"; cnt.textContent = `(${x.count})`;
+      txt.appendChild(cnt);
+      lbl.appendChild(txt);
+      msList.appendChild(lbl);
     });
     const dteSel = $("#filter-dte");
     (s.dte_presets || []).forEach((x) => {
@@ -963,17 +1026,69 @@ async function loadSegments() {
   } catch (e) { /* segments optional; filters just stay at "All" */ }
 }
 
+/* ---- theme multi-select ---- */
+function getThemeMsSelected() {
+  return [...($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])]
+    .map((cb) => cb.value);
+}
+function updateThemeMsBtn() {
+  const sel = getThemeMsSelected();
+  const btn = $("#theme-ms-btn");
+  if (!btn) return;
+  if (!sel.length) { btn.textContent = "All themes"; btn.classList.remove("active"); }
+  else if (sel.length === 1) { btn.textContent = sel[0]; btn.classList.add("active"); }
+  else { btn.textContent = `${sel.length} themes`; btn.classList.add("active"); }
+  const cnt = $("#theme-ms-count");
+  if (cnt) cnt.textContent = sel.length ? `${sel.length} selected` : "";
+}
+function onThemeMsChange() {
+  updateThemeMsBtn();
+  onFilterChange();
+}
+function toggleThemeMs(e) {
+  e.stopPropagation();
+  const panel = $("#theme-ms-panel");
+  if (!panel) return;
+  const isOpen = !panel.classList.contains("hidden");
+  if (isOpen) { panel.classList.add("hidden"); return; }
+  panel.classList.remove("hidden");
+  const s = $("#theme-ms-search");
+  if (s) { s.value = ""; filterThemeMs(); s.focus(); }
+}
+function filterThemeMs() {
+  const q = ($("#theme-ms-search")?.value || "").toLowerCase();
+  ($("#theme-ms-list")?.querySelectorAll(".theme-ms-item") || []).forEach((el) => {
+    el.classList.toggle("hidden", q.length > 0 && !el.textContent.toLowerCase().includes(q));
+  });
+}
+function clearThemeMs() {
+  ($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateThemeMsBtn();
+  onFilterChange();
+}
+// close the panel on outside click
+document.addEventListener("click", (e) => {
+  const wrap = $("#theme-ms-wrap");
+  if (wrap && !wrap.contains(e.target)) {
+    const panel = $("#theme-ms-panel");
+    if (panel) panel.classList.add("hidden");
+  }
+});
+
 function onFilterChange() {
-  recsFilter = { sector: $("#filter-sector").value, theme: $("#filter-theme").value,
+  recsFilter = { sector: $("#filter-sector").value, themes: getThemeMsSelected(),
                  dte: $("#filter-dte").value };
-  $("#filter-clear").style.display =
-    (recsFilter.sector || recsFilter.theme || recsFilter.dte) ? "" : "none";
+  const hasFilter = recsFilter.sector || recsFilter.themes.length || recsFilter.dte;
+  $("#filter-clear").style.display = hasFilter ? "" : "none";
   expandedTicker = null; expandedOcc = null;
   loadRecs(true);
 }
 
 function clearFilters() {
-  $("#filter-sector").value = ""; $("#filter-theme").value = ""; $("#filter-dte").value = "";
+  $("#filter-sector").value = "";
+  clearThemeMs();
+  $("#filter-dte").value = "";
   onFilterChange();
 }
 
@@ -1045,7 +1160,7 @@ async function loadRecs(refresh = false) {
     const params = new URLSearchParams();
     if (refresh) params.set("refresh", "true");
     if (recsFilter.sector) params.set("sector", recsFilter.sector);
-    if (recsFilter.theme) params.set("theme", recsFilter.theme);
+    (recsFilter.themes || []).forEach((t) => params.append("theme", t));
     if (recsFilter.dte) params.set("dte", recsFilter.dte);
     const qs = params.toString();
     recsData = await api("/recommendations" + (qs ? "?" + qs : ""));
@@ -1100,7 +1215,10 @@ function renderRecs() {
   const groups = recGroups(d);
   const seg = d.segment || {};
   const dtePhrase = seg.dte_band ? `DTE ${seg.dte_band.min}-${seg.dte_band.max}d` : "";
-  const segPhrase = [seg.sector, seg.theme, dtePhrase].filter(Boolean).join(" + ");
+  const themePhrase = seg.themes && seg.themes.length > 1
+    ? `${seg.themes.length} themes`
+    : (seg.theme || (seg.themes && seg.themes[0]) || "");
+  const segPhrase = [seg.sector, themePhrase, dtePhrase].filter(Boolean).join(" + ");
   const tail = recsView === "flat"
     ? `${(d.results || []).length} contracts ranked`
     : `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, top ${groups.length} tickers shown`;
@@ -1727,6 +1845,14 @@ async function loadScoring() {
       always required so a contract can be priced and scored.</div>
     <div class="set-grid">${filterFields(c.filters)}</div>
 
+    <h3 style="margin-top:18px;">Presets</h3>
+    <div class="set-note">Load a preset to auto-fill recommended settings. Click Save after to apply.</div>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="applyPreset('leaps')" title="Deep ITM, 180-400 DTE, trend-heavy">LEAPS</button>
+      <button class="preset-btn" onclick="applyPreset('standard')" title="Balanced mid-delta, 25-60 DTE">Standard</button>
+      <button class="preset-btn" onclick="applyPreset('momentum')" title="Short-dated momentum, higher volume weight">Momentum</button>
+    </div>
+
     <div class="toolbar" style="margin-top:10px;">
       <button class="primary" id="scoring-save" onclick="saveScoring()">Save scoring + filters</button>
       <button class="small" onclick="resetScoring()">Reset to defaults</button>
@@ -1796,6 +1922,43 @@ function resetScoring() {
   [...FILTER_NUM, "max_spread_pct"].forEach((k) => { if ($("#f-" + k)) $("#f-" + k).value = ""; });
   if ($("#f-require_greeks")) $("#f-require_greeks").value = "true";
   updateWeightPct();
+}
+
+const SCORING_PRESETS = {
+  leaps: {
+    // Deep ITM long-dated calls: trend dominates, IV rank less meaningful,
+    // high dte_fit ensures we stay in 180-400d zone, extrinsic near-zero for ITM
+    weights: { delta_fit: 0.25, extrinsic: 0.02, spread: 0.0, open_interest: 0.05,
+               volume: 0.03, iv_rank: 0.1, dte_fit: 0.3, trend_alignment: 0.5 },
+    delta_min: 0.7, delta_max: 1.0,
+    note: "Select DTE: LEAPS (180-400d) in the scan toolbar to match."
+  },
+  standard: {
+    // Balanced mid-delta calls: all components weighted, standard DTE
+    weights: { delta_fit: 0.2, extrinsic: 0.1, spread: 0.05, open_interest: 0.1,
+               volume: 0.1, iv_rank: 0.2, dte_fit: 0.2, trend_alignment: 0.3 },
+    delta_min: 0.4, delta_max: 0.7,
+    note: "Works well with DTE: Standard (25-60d) or Swing (45-90d)."
+  },
+  momentum: {
+    // Short-dated momentum plays: trend + volume lead, tighter delta range
+    weights: { delta_fit: 0.15, extrinsic: 0.05, spread: 0.05, open_interest: 0.1,
+               volume: 0.2, iv_rank: 0.1, dte_fit: 0.15, trend_alignment: 0.5 },
+    delta_min: 0.5, delta_max: 0.8,
+    note: "Pair with DTE: Closer (7-25d) or Standard for short-dated momentum plays."
+  },
+};
+
+function applyPreset(name) {
+  const p = SCORING_PRESETS[name];
+  if (!p) return;
+  Object.entries(p.weights).forEach(([k, v]) => { if ($("#w-" + k)) $("#w-" + k).value = v; });
+  if (p.delta_min != null) $("#w-delta-min").value = p.delta_min;
+  if (p.delta_max != null) $("#w-delta-max").value = p.delta_max;
+  updateWeightPct();
+  const res = $("#scoring-result");
+  if (res) res.textContent = `${name.charAt(0).toUpperCase() + name.slice(1)} preset loaded. ${p.note || ""} Click Save to apply.`;
+  toast(`${name} preset loaded — click Save to apply`);
 }
 
 async function saveScoring() {

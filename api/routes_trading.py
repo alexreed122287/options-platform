@@ -15,7 +15,7 @@ SAFETY INVARIANTS (do not weaken):
 import datetime as dt
 import json
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -386,7 +386,7 @@ async def alerts_mark_seen() -> Dict[str, Any]:
 class SnapshotRequest(BaseModel):
     top_n: int = Field(25, ge=1, le=200)
     sector: Optional[str] = None
-    theme: Optional[str] = None
+    themes: Optional[List[str]] = None
     dte: Optional[str] = None
 
 
@@ -394,7 +394,7 @@ class SnapshotRequest(BaseModel):
 async def tracking_snapshot(req: SnapshotRequest) -> Dict[str, Any]:
     try:
         return await get_deps().tracker.snapshot(
-            top_n=req.top_n, sector=req.sector, theme=req.theme, dte=req.dte
+            top_n=req.top_n, sector=req.sector, themes=req.themes, dte=req.dte
         )
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
