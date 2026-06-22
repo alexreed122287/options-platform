@@ -2,11 +2,12 @@
   "name": "options-platform",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r requirements.txt",
+  "postStartCommand": "nohup python run.py > /tmp/options-platform.log 2>&1 &",
   "forwardPorts": [8787],
   "portsAttributes": {
     "8787": {
       "label": "options-platform dashboard",
-      "onAutoForward": "notify"
+      "onAutoForward": "openBrowser"
     }
   },
   "remoteEnv": {
