@@ -222,7 +222,8 @@
     tickId: null,
     records: load(STORE_KEY, []),       // each: {id, task, durationMs, duration, capturedCentral, capturedISO, synced}
     pendingDeletes: load(DELQ_KEY, []),  // ids deleted locally, not yet confirmed on server
-    online: false
+    online: false,
+    everSynced: false   // have we ever reached a sync server? (false on GitHub Pages)
   };
 
   // ---------- persistence ----------
@@ -302,6 +303,7 @@
       });
       state.pendingDeletes = [];
       state.online = true;
+      state.everSynced = true;
       saveRecords(); saveDeletes();
       render();
       setSync("ok", "Synced · shared across devices");
@@ -310,7 +312,13 @@
       state.online = false;
       render();
       var n = unsynced().length;
-      setSync("off", "Offline — saved on this device" + (n ? " (" + n + " to sync)" : ""));
+      if (!state.everSynced) {
+        // No sync server reached (e.g. hosted on GitHub Pages) - this is the
+        // normal single-device mode, not an error. Keep it calm.
+        setSync("", "Saved on this device");
+      } else {
+        setSync("off", "Offline — will sync when reconnected" + (n ? " (" + n + " queued)" : ""));
+      }
     });
   }
 

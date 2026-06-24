@@ -87,8 +87,11 @@ async def index():
 async def timer():
     """Standalone line/task stopwatch dashboard. Self-contained single page -
     captures start/stop durations with a Central-time (CST/CDT) stamp, stores
-    them in the browser, and exports CSV for analysis by line or task."""
-    page = ROOT / "web" / "timer.html"
+    them in the browser, and exports CSV for analysis by line or task.
+
+    Same file published to GitHub Pages (docs/index.html) - one source of
+    truth whether served here or statically."""
+    page = ROOT / "docs" / "index.html"
     if page.exists():
         return FileResponse(page)
     return JSONResponse({"message": "timer page not found"}, status_code=404)
