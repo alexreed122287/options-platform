@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from api.deps import get_deps
 from api.routes_market import router as market_router
 from api.routes_settings import router as settings_router
+from api.routes_timer import router as timer_router
 from api.routes_trading import router as trading_router
 from data.env import ROOT, env
 
@@ -39,6 +40,7 @@ app = FastAPI(title="Options Platform", version=APP_VERSION, lifespan=lifespan)
 app.include_router(market_router, prefix="/api")
 app.include_router(trading_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(timer_router, prefix="/api")
 
 
 @app.middleware("http")

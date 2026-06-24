@@ -34,8 +34,14 @@
     margin: 0 auto;
   }
   .wrap { padding: 16px 16px 40px; }
-  h1 { font-size: 20px; margin: 8px 0 16px; font-weight: 700; letter-spacing: 0.3px; }
+  h1 { font-size: 20px; margin: 8px 0 6px; font-weight: 700; letter-spacing: 0.3px; }
   h1 .sub { display:block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+
+  .sync-bar { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--muted); margin: 0 0 16px; }
+  .dot { width:9px; height:9px; border-radius:50%; background: var(--muted); flex:0 0 auto; }
+  .dot.ok { background: var(--green); }
+  .dot.off { background: var(--amber); }
+  .dot.err { background: var(--red); }
 
   .card {
     background: var(--panel);
@@ -45,7 +51,6 @@
     margin-bottom: 16px;
   }
 
-  /* Task selector */
   .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; }
   .tasks {
     display: grid;
@@ -86,7 +91,6 @@
   }
   input[type=text]::placeholder { color: var(--muted); }
 
-  /* Stopwatch */
   .timer-display {
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -116,7 +120,6 @@
   .btn-start { background: var(--green); }
   .btn-stop  { background: var(--red); }
 
-  /* Records */
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
   .toolbar .spacer { flex: 1; }
   select, .mini-btn {
@@ -142,8 +145,8 @@
   }
   .del { color: var(--red); cursor: pointer; font-weight: 700; padding: 4px 8px; }
   .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  .unsynced { opacity: 0.6; }
 
-  /* Summary */
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
   .stat .k { font-size: 12px; color: var(--muted); }
@@ -156,6 +159,7 @@
   <h1>Line Timer
     <span class="sub">Stopwatch &amp; task time tracker — times stamped in Central (CST/CDT)</span>
   </h1>
+  <div class="sync-bar"><span class="dot" id="syncDot"></span><span id="syncText">Connecting…</span></div>
 
   <!-- Task selection -->
   <div class="card">
@@ -187,6 +191,7 @@
     <div class="toolbar">
       <select id="filter"><option value="">All tasks</option></select>
       <div class="spacer"></div>
+      <button class="mini-btn" id="refreshBtn">Refresh</button>
       <button class="mini-btn primary" id="exportBtn">Export CSV</button>
       <button class="mini-btn danger" id="clearBtn">Clear</button>
     </div>
@@ -206,23 +211,31 @@
   "use strict";
 
   var TASKS = ["Line 1", "Line 2", "Line 3", "Line 4", "CIP", "Breakdown", "Changeovers", "Other"];
-  var STORE_KEY = "lineTimer.records.v1";
+  var STORE_KEY = "lineTimer.records.v2";
+  var DELQ_KEY = "lineTimer.pendingDeletes.v1";
+  var API = "api/timer"; // relative -> works wherever the page is served
 
   var state = {
     selected: null,
     running: false,
-    startMs: 0,      // performance-independent wall clock start (Date.now based)
+    startMs: 0,
     tickId: null,
-    records: load()
+    records: load(STORE_KEY, []),       // each: {id, task, durationMs, duration, capturedCentral, capturedISO, synced}
+    pendingDeletes: load(DELQ_KEY, []),  // ids deleted locally, not yet confirmed on server
+    online: false
   };
 
   // ---------- persistence ----------
-  function load() {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
-    catch (e) { return []; }
+  function load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+    catch (e) { return fallback; }
   }
-  function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state.records)); } catch (e) {}
+  function saveRecords() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state.records)); } catch (e) {} }
+  function saveDeletes() { try { localStorage.setItem(DELQ_KEY, JSON.stringify(state.pendingDeletes)); } catch (e) {} }
+
+  function genId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "id-" + Date.now() + "-" + Math.floor(Math.random() * 1e9).toString(36);
   }
 
   // ---------- time helpers ----------
@@ -235,7 +248,6 @@
   }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
 
-  // Format a Date as Central time. America/Chicago auto-handles CST vs CDT.
   function fmtCentral(date) {
     var parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Chicago",
@@ -247,6 +259,59 @@
     parts.forEach(function (x) { p[x.type] = x.value; });
     var hour = p.hour === "24" ? "00" : p.hour;
     return p.year + "-" + p.month + "-" + p.day + " " + hour + ":" + p.minute + ":" + p.second + " " + (p.timeZoneName || "CT");
+  }
+
+  // ---------- sync ----------
+  var syncDot = document.getElementById("syncDot");
+  var syncText = document.getElementById("syncText");
+
+  function setSync(kind, text) {
+    syncDot.className = "dot" + (kind ? " " + kind : "");
+    syncText.textContent = text;
+  }
+
+  function decorate(rec) {
+    // rehydrate display fields the server doesn't store
+    rec.duration = fmtDuration(rec.durationMs);
+    if (rec.synced === undefined) rec.synced = true;
+    return rec;
+  }
+
+  function unsynced() { return state.records.filter(function (r) { return !r.synced; }); }
+
+  // Push local changes, then replace the cache with the server's list.
+  function sync() {
+    setSync("", "Syncing…");
+    var payload = {
+      captures: unsynced().map(function (r) {
+        return { id: r.id, task: r.task, durationMs: r.durationMs,
+                 capturedCentral: r.capturedCentral, capturedISO: r.capturedISO };
+      }),
+      deletedIds: state.pendingDeletes.slice()
+    };
+    return fetch(API + "/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+    .then(function (data) {
+      state.records = (data.captures || []).map(function (r) {
+        return decorate({ id: r.id, task: r.task, durationMs: r.durationMs,
+                          capturedCentral: r.capturedCentral, capturedISO: r.capturedISO, synced: true });
+      });
+      state.pendingDeletes = [];
+      state.online = true;
+      saveRecords(); saveDeletes();
+      render();
+      setSync("ok", "Synced · shared across devices");
+    })
+    .catch(function () {
+      state.online = false;
+      render();
+      var n = unsynced().length;
+      setSync("off", "Offline — saved on this device" + (n ? " (" + n + " to sync)" : ""));
+    });
   }
 
   // ---------- task buttons ----------
@@ -263,7 +328,7 @@
   });
 
   function selectTask(t) {
-    if (state.running) return; // don't switch task mid-run
+    if (state.running) return;
     state.selected = t;
     Array.prototype.forEach.call(tasksEl.children, function (b) {
       b.classList.toggle("selected", b.textContent === t);
@@ -287,18 +352,12 @@
   }
 
   function updateMeta() {
-    if (state.running) {
-      meta.textContent = "Timing: " + currentTaskName();
-    } else if (state.selected) {
-      meta.textContent = currentTaskName() + " — ready. Press Start.";
-    } else {
-      meta.textContent = "Pick a task, then press Start";
-    }
+    if (state.running) meta.textContent = "Timing: " + currentTaskName();
+    else if (state.selected) meta.textContent = currentTaskName() + " — ready. Press Start.";
+    else meta.textContent = "Pick a task, then press Start";
   }
 
-  function tick() {
-    display.textContent = fmtDuration(Date.now() - state.startMs);
-  }
+  function tick() { display.textContent = fmtDuration(Date.now() - state.startMs); }
 
   function start() {
     if (!state.selected) { meta.textContent = "Select a task first."; return; }
@@ -323,17 +382,20 @@
     stopBtn.disabled = true;
 
     var endDate = new Date(endMs);
-    state.records.unshift({
+    var rec = decorate({
+      id: genId(),
       task: currentTaskName(),
       durationMs: elapsed,
-      duration: fmtDuration(elapsed),
       capturedCentral: fmtCentral(endDate),
-      capturedISO: endDate.toISOString()
+      capturedISO: endDate.toISOString(),
+      synced: false
     });
-    save();
+    state.records.unshift(rec);
+    saveRecords();
     display.textContent = "00:00:00";
     render();
     updateMeta();
+    sync(); // push immediately; falls back to offline cache if unreachable
   }
 
   startBtn.addEventListener("click", start);
@@ -344,13 +406,9 @@
   var filterEl = document.getElementById("filter");
   var summaryEl = document.getElementById("summary");
 
-  function baseTask(name) {
-    // group "Other: foo" under "Other" for the filter, but keep full label in table
-    return name.indexOf("Other:") === 0 ? "Other" : name;
-  }
+  function baseTask(name) { return name.indexOf("Other:") === 0 ? "Other" : name; }
 
   function render() {
-    // filter dropdown options (preserve current selection)
     var cur = filterEl.value;
     var present = {};
     state.records.forEach(function (r) { present[baseTask(r.task)] = true; });
@@ -365,18 +423,15 @@
       });
     filterEl.value = cur;
 
-    var filtered = state.records.filter(function (r) {
-      return !cur || baseTask(r.task) === cur;
-    });
+    var filtered = state.records.filter(function (r) { return !cur || baseTask(r.task) === cur; });
 
-    // table
     rowsEl.innerHTML = "";
     if (!filtered.length) {
       rowsEl.innerHTML = '<tr><td colspan="5" class="empty">No captures' + (cur ? " for " + cur : "") + ' yet.</td></tr>';
     } else {
       filtered.forEach(function (r) {
-        var idx = state.records.indexOf(r);
         var tr = document.createElement("tr");
+        if (!r.synced) tr.className = "unsynced";
         tr.innerHTML =
           "<td>" + (filtered.length - filtered.indexOf(r)) + "</td>" +
           '<td><span class="pill"></span></td>' +
@@ -385,20 +440,16 @@
           '<td><span class="del">✕</span></td>';
         tr.children[1].firstChild.textContent = r.task;
         tr.children[2].textContent = r.duration;
-        tr.children[3].textContent = r.capturedCentral;
-        tr.children[4].firstChild.addEventListener("click", function () { removeAt(idx); });
+        tr.children[3].textContent = r.capturedCentral + (r.synced ? "" : " ·");
+        tr.children[4].firstChild.addEventListener("click", function () { removeById(r.id); });
         rowsEl.appendChild(tr);
       });
     }
-
     renderSummary(filtered);
   }
 
   function renderSummary(list) {
-    if (!list.length) {
-      summaryEl.innerHTML = '<div class="empty">No captures yet.</div>';
-      return;
-    }
+    if (!list.length) { summaryEl.innerHTML = '<div class="empty">No captures yet.</div>'; return; }
     var groups = {};
     list.forEach(function (r) {
       var k = baseTask(r.task);
@@ -412,10 +463,7 @@
       var g = groups[k];
       var div = document.createElement("div");
       div.className = "stat";
-      div.innerHTML =
-        '<div class="k"></div>' +
-        '<div class="v"></div>' +
-        '<div class="n"></div>';
+      div.innerHTML = '<div class="k"></div><div class="v"></div><div class="n"></div>';
       div.children[0].textContent = k;
       div.children[1].textContent = fmtDuration(g.total);
       div.children[2].textContent = g.count + " capture" + (g.count > 1 ? "s" : "") +
@@ -424,13 +472,19 @@
     });
   }
 
-  function removeAt(i) {
+  function removeById(id) {
+    var i = state.records.findIndex(function (r) { return r.id === id; });
+    if (i < 0) return;
+    var wasSynced = state.records[i].synced;
     state.records.splice(i, 1);
-    save();
+    if (wasSynced) { state.pendingDeletes.push(id); saveDeletes(); }
+    saveRecords();
     render();
+    sync();
   }
 
   filterEl.addEventListener("change", render);
+  document.getElementById("refreshBtn").addEventListener("click", sync);
 
   // ---------- export ----------
   function csvCell(v) {
@@ -445,14 +499,9 @@
     var rows = state.records.filter(function (r) { return !cur || baseTask(r.task) === cur; });
     var header = ["Task", "Duration (HH:MM:SS)", "Duration (seconds)", "Captured (Central)", "Captured (UTC ISO)"];
     var lines = [header.map(csvCell).join(",")];
-    // export oldest-first for natural reading order
     rows.slice().reverse().forEach(function (r) {
       lines.push([
-        r.task,
-        r.duration,
-        Math.round(r.durationMs / 1000),
-        r.capturedCentral,
-        r.capturedISO
+        r.task, r.duration, Math.round(r.durationMs / 1000), r.capturedCentral, r.capturedISO
       ].map(csvCell).join(","));
     });
     var csv = "﻿" + lines.join("\r\n"); // BOM so Excel reads UTF-8
@@ -470,21 +519,30 @@
 
   document.getElementById("clearBtn").addEventListener("click", function () {
     if (!state.records.length) return;
-    if (confirm("Delete all " + state.records.length + " captured times? Export first if you want to keep them.")) {
-      state.records = [];
-      save();
-      render();
-    }
+    if (!confirm("Delete all " + state.records.length + " captured times (on every device)? Export first if you want to keep them.")) return;
+    state.records = [];
+    state.pendingDeletes = [];
+    saveRecords(); saveDeletes();
+    render();
+    fetch(API + "/captures", { method: "DELETE" })
+      .then(function (res) { if (!res.ok) throw new Error(); setSync("ok", "Cleared · synced"); })
+      .catch(function () { setSync("off", "Cleared on this device (server unreachable)"); });
   });
 
-  // warn before leaving while timing
   window.addEventListener("beforeunload", function (e) {
     if (state.running) { e.preventDefault(); e.returnValue = ""; }
   });
 
+  // re-sync when the device comes back / the page is refocused
+  window.addEventListener("online", sync);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) sync(); });
+
   // ---------- init ----------
+  // show whatever is cached locally immediately, then reconcile with server
+  state.records.forEach(decorate);
   render();
   updateMeta();
+  sync();
 })();
 </script>
 </body>
