@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS alerts (
   seen INTEGER NOT NULL DEFAULT 0,
   UNIQUE (occ_symbol, date)
 );
+CREATE TABLE IF NOT EXISTS timer_captures (
+  id TEXT PRIMARY KEY,
+  task TEXT NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  captured_central TEXT NOT NULL,
+  captured_iso TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS score_tracking (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   snapshot_date TEXT NOT NULL,

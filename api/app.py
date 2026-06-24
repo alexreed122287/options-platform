@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from api.deps import get_deps
 from api.routes_market import router as market_router
 from api.routes_settings import router as settings_router
+from api.routes_timer import router as timer_router
 from api.routes_trading import router as trading_router
 from data.env import ROOT, env
 
@@ -39,6 +40,7 @@ app = FastAPI(title="Options Platform", version=APP_VERSION, lifespan=lifespan)
 app.include_router(market_router, prefix="/api")
 app.include_router(trading_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(timer_router, prefix="/api")
 
 
 @app.middleware("http")
@@ -79,3 +81,17 @@ async def index():
     if page.exists():
         return FileResponse(page)
     return JSONResponse({"message": "dashboard not built yet - see /docs for the API"})
+
+
+@app.get("/timer")
+async def timer():
+    """Standalone line/task stopwatch dashboard. Self-contained single page -
+    captures start/stop durations with a Central-time (CST/CDT) stamp, stores
+    them in the browser, and exports CSV for analysis by line or task.
+
+    Same file published to GitHub Pages (docs/index.html) - one source of
+    truth whether served here or statically."""
+    page = ROOT / "docs" / "index.html"
+    if page.exists():
+        return FileResponse(page)
+    return JSONResponse({"message": "timer page not found"}, status_code=404)
