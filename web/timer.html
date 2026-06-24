@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#0f172a" />
+<title>Line Timer</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  .wrap { padding: 16px 16px 40px; }
+  h1 { font-size: 20px; margin: 8px 0 16px; font-weight: 700; letter-spacing: 0.3px; }
+  h1 .sub { display:block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Task selector */
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px; }
+  .tasks {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  @media (min-width: 560px) { .tasks { grid-template-columns: repeat(4, 1fr); } }
+  .task-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+    min-height: 56px;
+  }
+  .task-btn:active { transform: scale(0.97); }
+  .task-btn.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06283d;
+  }
+
+  #otherWrap { margin-top: 10px; display: none; }
+  #otherWrap.show { display: block; }
+  input[type=text] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 16px;
+  }
+  input[type=text]::placeholder { color: var(--muted); }
+
+  /* Stopwatch */
+  .timer-display {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin: 8px 0 4px;
+    line-height: 1.1;
+  }
+  .timer-display.running { color: var(--green); }
+  .timer-meta { text-align:center; color: var(--muted); font-size: 13px; min-height: 18px; margin-bottom: 16px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .big-btn {
+    appearance: none;
+    border: none;
+    border-radius: 14px;
+    padding: 22px 8px;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #fff;
+    transition: transform .05s ease, opacity .15s ease;
+  }
+  .big-btn:active { transform: scale(0.98); }
+  .big-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--green); }
+  .btn-stop  { background: var(--red); }
+
+  /* Records */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar .spacer { flex: 1; }
+  select, .mini-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .mini-btn.primary { background: var(--accent); color: #06283d; border-color: var(--accent); font-weight: 700; }
+  .mini-btn.danger { background: transparent; color: var(--red); border-color: var(--red); }
+
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+  td.dur { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pill {
+    display: inline-block; padding: 3px 9px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; font-weight: 600;
+  }
+  .del { color: var(--red); cursor: pointer; font-weight: 700; padding: 4px 8px; }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+
+  /* Summary */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat .v { font-size: 18px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .n { font-size: 11px; color: var(--muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Line Timer
+    <span class="sub">Stopwatch &amp; task time tracker — times stamped in Central (CST/CDT)</span>
+  </h1>
+
+  <!-- Task selection -->
+  <div class="card">
+    <div class="label">Select task</div>
+    <div class="tasks" id="tasks"></div>
+    <div id="otherWrap">
+      <input type="text" id="otherLabel" placeholder="Describe the &quot;Other&quot; task (optional)" maxlength="60" />
+    </div>
+  </div>
+
+  <!-- Stopwatch -->
+  <div class="card">
+    <div class="timer-display" id="display">00:00:00</div>
+    <div class="timer-meta" id="meta">Pick a task, then press Start</div>
+    <div class="controls">
+      <button class="big-btn btn-start" id="startBtn">Start</button>
+      <button class="big-btn btn-stop" id="stopBtn" disabled>Stop</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="card">
+    <div class="label">Summary</div>
+    <div class="summary-grid" id="summary"><div class="empty">No captures yet.</div></div>
+  </div>
+
+  <!-- Records -->
+  <div class="card">
+    <div class="toolbar">
+      <select id="filter"><option value="">All tasks</option></select>
+      <div class="spacer"></div>
+      <button class="mini-btn primary" id="exportBtn">Export CSV</button>
+      <button class="mini-btn danger" id="clearBtn">Clear</button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Task</th><th>Duration</th><th>Captured (CST/CDT)</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TASKS = ["Line 1", "Line 2", "Line 3", "Line 4", "CIP", "Breakdown", "Changeovers", "Other"];
+  var STORE_KEY = "lineTimer.records.v1";
+
+  var state = {
+    selected: null,
+    running: false,
+    startMs: 0,      // performance-independent wall clock start (Date.now based)
+    tickId: null,
+    records: load()
+  };
+
+  // ---------- persistence ----------
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state.records)); } catch (e) {}
+  }
+
+  // ---------- time helpers ----------
+  function fmtDuration(ms) {
+    var total = Math.floor(ms / 1000);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+    return pad(h) + ":" + pad(m) + ":" + pad(s);
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  // Format a Date as Central time. America/Chicago auto-handles CST vs CDT.
+  function fmtCentral(date) {
+    var parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Chicago",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false, timeZoneName: "short"
+    }).formatToParts(date);
+    var p = {};
+    parts.forEach(function (x) { p[x.type] = x.value; });
+    var hour = p.hour === "24" ? "00" : p.hour;
+    return p.year + "-" + p.month + "-" + p.day + " " + hour + ":" + p.minute + ":" + p.second + " " + (p.timeZoneName || "CT");
+  }
+
+  // ---------- task buttons ----------
+  var tasksEl = document.getElementById("tasks");
+  var otherWrap = document.getElementById("otherWrap");
+  var otherLabel = document.getElementById("otherLabel");
+
+  TASKS.forEach(function (t) {
+    var b = document.createElement("button");
+    b.className = "task-btn";
+    b.textContent = t;
+    b.addEventListener("click", function () { selectTask(t); });
+    tasksEl.appendChild(b);
+  });
+
+  function selectTask(t) {
+    if (state.running) return; // don't switch task mid-run
+    state.selected = t;
+    Array.prototype.forEach.call(tasksEl.children, function (b) {
+      b.classList.toggle("selected", b.textContent === t);
+    });
+    otherWrap.classList.toggle("show", t === "Other");
+    updateMeta();
+  }
+
+  // ---------- stopwatch ----------
+  var display = document.getElementById("display");
+  var meta = document.getElementById("meta");
+  var startBtn = document.getElementById("startBtn");
+  var stopBtn = document.getElementById("stopBtn");
+
+  function currentTaskName() {
+    if (state.selected === "Other") {
+      var custom = (otherLabel.value || "").trim();
+      return custom ? "Other: " + custom : "Other";
+    }
+    return state.selected;
+  }
+
+  function updateMeta() {
+    if (state.running) {
+      meta.textContent = "Timing: " + currentTaskName();
+    } else if (state.selected) {
+      meta.textContent = currentTaskName() + " — ready. Press Start.";
+    } else {
+      meta.textContent = "Pick a task, then press Start";
+    }
+  }
+
+  function tick() {
+    display.textContent = fmtDuration(Date.now() - state.startMs);
+  }
+
+  function start() {
+    if (!state.selected) { meta.textContent = "Select a task first."; return; }
+    state.running = true;
+    state.startMs = Date.now();
+    display.classList.add("running");
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    tick();
+    state.tickId = setInterval(tick, 250);
+    updateMeta();
+  }
+
+  function stop() {
+    if (!state.running) return;
+    var endMs = Date.now();
+    var elapsed = endMs - state.startMs;
+    clearInterval(state.tickId);
+    state.running = false;
+    display.classList.remove("running");
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+
+    var endDate = new Date(endMs);
+    state.records.unshift({
+      task: currentTaskName(),
+      durationMs: elapsed,
+      duration: fmtDuration(elapsed),
+      capturedCentral: fmtCentral(endDate),
+      capturedISO: endDate.toISOString()
+    });
+    save();
+    display.textContent = "00:00:00";
+    render();
+    updateMeta();
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", stop);
+
+  // ---------- records / summary / filter ----------
+  var rowsEl = document.getElementById("rows");
+  var filterEl = document.getElementById("filter");
+  var summaryEl = document.getElementById("summary");
+
+  function baseTask(name) {
+    // group "Other: foo" under "Other" for the filter, but keep full label in table
+    return name.indexOf("Other:") === 0 ? "Other" : name;
+  }
+
+  function render() {
+    // filter dropdown options (preserve current selection)
+    var cur = filterEl.value;
+    var present = {};
+    state.records.forEach(function (r) { present[baseTask(r.task)] = true; });
+    filterEl.innerHTML = '<option value="">All tasks</option>';
+    TASKS.concat(Object.keys(present).filter(function (k) { return TASKS.indexOf(k) < 0; }))
+      .forEach(function (t) {
+        if (present[t]) {
+          var o = document.createElement("option");
+          o.value = t; o.textContent = t;
+          filterEl.appendChild(o);
+        }
+      });
+    filterEl.value = cur;
+
+    var filtered = state.records.filter(function (r) {
+      return !cur || baseTask(r.task) === cur;
+    });
+
+    // table
+    rowsEl.innerHTML = "";
+    if (!filtered.length) {
+      rowsEl.innerHTML = '<tr><td colspan="5" class="empty">No captures' + (cur ? " for " + cur : "") + ' yet.</td></tr>';
+    } else {
+      filtered.forEach(function (r) {
+        var idx = state.records.indexOf(r);
+        var tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" + (filtered.length - filtered.indexOf(r)) + "</td>" +
+          '<td><span class="pill"></span></td>' +
+          '<td class="dur"></td>' +
+          "<td></td>" +
+          '<td><span class="del">✕</span></td>';
+        tr.children[1].firstChild.textContent = r.task;
+        tr.children[2].textContent = r.duration;
+        tr.children[3].textContent = r.capturedCentral;
+        tr.children[4].firstChild.addEventListener("click", function () { removeAt(idx); });
+        rowsEl.appendChild(tr);
+      });
+    }
+
+    renderSummary(filtered);
+  }
+
+  function renderSummary(list) {
+    if (!list.length) {
+      summaryEl.innerHTML = '<div class="empty">No captures yet.</div>';
+      return;
+    }
+    var groups = {};
+    list.forEach(function (r) {
+      var k = baseTask(r.task);
+      if (!groups[k]) groups[k] = { count: 0, total: 0 };
+      groups[k].count++;
+      groups[k].total += r.durationMs;
+    });
+    var keys = Object.keys(groups).sort(function (a, b) { return groups[b].total - groups[a].total; });
+    summaryEl.innerHTML = "";
+    keys.forEach(function (k) {
+      var g = groups[k];
+      var div = document.createElement("div");
+      div.className = "stat";
+      div.innerHTML =
+        '<div class="k"></div>' +
+        '<div class="v"></div>' +
+        '<div class="n"></div>';
+      div.children[0].textContent = k;
+      div.children[1].textContent = fmtDuration(g.total);
+      div.children[2].textContent = g.count + " capture" + (g.count > 1 ? "s" : "") +
+        " · avg " + fmtDuration(Math.round(g.total / g.count));
+      summaryEl.appendChild(div);
+    });
+  }
+
+  function removeAt(i) {
+    state.records.splice(i, 1);
+    save();
+    render();
+  }
+
+  filterEl.addEventListener("change", render);
+
+  // ---------- export ----------
+  function csvCell(v) {
+    v = String(v == null ? "" : v);
+    if (/[",\n]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    if (!state.records.length) { alert("Nothing to export yet."); return; }
+    var cur = filterEl.value;
+    var rows = state.records.filter(function (r) { return !cur || baseTask(r.task) === cur; });
+    var header = ["Task", "Duration (HH:MM:SS)", "Duration (seconds)", "Captured (Central)", "Captured (UTC ISO)"];
+    var lines = [header.map(csvCell).join(",")];
+    // export oldest-first for natural reading order
+    rows.slice().reverse().forEach(function (r) {
+      lines.push([
+        r.task,
+        r.duration,
+        Math.round(r.durationMs / 1000),
+        r.capturedCentral,
+        r.capturedISO
+      ].map(csvCell).join(","));
+    });
+    var csv = "﻿" + lines.join("\r\n"); // BOM so Excel reads UTF-8
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = "line-timer-" + (cur ? cur.replace(/\s+/g, "_") + "-" : "") + stamp + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", function () {
+    if (!state.records.length) return;
+    if (confirm("Delete all " + state.records.length + " captured times? Export first if you want to keep them.")) {
+      state.records = [];
+      save();
+      render();
+    }
+  });
+
+  // warn before leaving while timing
+  window.addEventListener("beforeunload", function (e) {
+    if (state.running) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  // ---------- init ----------
+  render();
+  updateMeta();
+})();
+</script>
+</body>
+</html>

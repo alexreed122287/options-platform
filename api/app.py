@@ -79,3 +79,14 @@ async def index():
     if page.exists():
         return FileResponse(page)
     return JSONResponse({"message": "dashboard not built yet - see /docs for the API"})
+
+
+@app.get("/timer")
+async def timer():
+    """Standalone line/task stopwatch dashboard. Self-contained single page -
+    captures start/stop durations with a Central-time (CST/CDT) stamp, stores
+    them in the browser, and exports CSV for analysis by line or task."""
+    page = ROOT / "web" / "timer.html"
+    if page.exists():
+        return FileResponse(page)
+    return JSONResponse({"message": "timer page not found"}, status_code=404)
