@@ -80,8 +80,6 @@
     color: #06283d;
   }
 
-  #otherWrap { margin-top: 10px; display: none; }
-  #otherWrap.show { display: block; }
   input[type=text] {
     width: 100%;
     background: var(--panel-2);
@@ -167,9 +165,6 @@
   <div class="card">
     <div class="label">Select task</div>
     <div class="tasks" id="tasks"></div>
-    <div id="otherWrap">
-      <input type="text" id="otherLabel" placeholder="Describe the &quot;Other&quot; task (optional)" maxlength="60" />
-    </div>
   </div>
 
   <!-- Stopwatch -->
@@ -212,7 +207,7 @@
 (function () {
   "use strict";
 
-  var TASKS = ["Line 1", "Line 2", "Line 3", "Line 4", "CIP", "Breakdown", "Changeovers", "Other"];
+  var TASKS = ["Line 1", "Line 2", "Line 3", "Line 4", "Breakdown"];
   var STORE_KEY = "lineTimer.records.v2";
   var DELQ_KEY = "lineTimer.pendingDeletes.v1";
   var API = "api/timer"; // relative -> works wherever the page is served
@@ -326,8 +321,6 @@
 
   // ---------- task buttons ----------
   var tasksEl = document.getElementById("tasks");
-  var otherWrap = document.getElementById("otherWrap");
-  var otherLabel = document.getElementById("otherLabel");
 
   TASKS.forEach(function (t) {
     var b = document.createElement("button");
@@ -343,7 +336,6 @@
     Array.prototype.forEach.call(tasksEl.children, function (b) {
       b.classList.toggle("selected", b.textContent === t);
     });
-    otherWrap.classList.toggle("show", t === "Other");
     updateMeta();
   }
 
@@ -354,10 +346,6 @@
   var stopBtn = document.getElementById("stopBtn");
 
   function currentTaskName() {
-    if (state.selected === "Other") {
-      var custom = (otherLabel.value || "").trim();
-      return custom ? "Other: " + custom : "Other";
-    }
     return state.selected;
   }
 
@@ -416,7 +404,7 @@
   var filterEl = document.getElementById("filter");
   var summaryEl = document.getElementById("summary");
 
-  function baseTask(name) { return name.indexOf("Other:") === 0 ? "Other" : name; }
+  function baseTask(name) { return name; }
 
   function render() {
     var cur = filterEl.value;
@@ -507,11 +495,17 @@
     if (!state.records.length) { alert("Nothing to export yet."); return; }
     var cur = filterEl.value;
     var rows = state.records.filter(function (r) { return !cur || baseTask(r.task) === cur; });
-    var header = ["Task", "Duration (HH:MM:SS)", "Duration (seconds)", "Captured (Central)", "Captured (UTC ISO)"];
+    var header = ["Task", "Date (Central)", "Time (Central)", "Time zone",
+                  "Duration (HH:MM:SS)", "Duration (seconds)", "Captured (Central)"];
     var lines = [header.map(csvCell).join(",")];
     rows.slice().reverse().forEach(function (r) {
+      // capturedCentral looks like "2026-06-24 09:00:00 CDT"
+      var parts = (r.capturedCentral || "").split(" ");
+      var date = parts[0] || "";
+      var time = parts[1] || "";
+      var tz = parts[2] || "";
       lines.push([
-        r.task, r.duration, Math.round(r.durationMs / 1000), r.capturedCentral, r.capturedISO
+        r.task, date, time, tz, r.duration, Math.round(r.durationMs / 1000), r.capturedCentral
       ].map(csvCell).join(","));
     });
     var csv = "﻿" + lines.join("\r\n"); // BOM so Excel reads UTF-8
