@@ -2,7 +2,7 @@
   "name": "options-platform",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r requirements.txt",
-  "postStartCommand": "nohup python run.py > /tmp/options-platform.log 2>&1 &",
+  "postStartCommand": "bash .devcontainer/start-dashboard.sh",
   "forwardPorts": [8787],
   "portsAttributes": {
     "8787": {
