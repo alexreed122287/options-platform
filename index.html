@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Options Platform</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .brand { font-weight: 700; letter-spacing: 1px; }
+  .brand .ver { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .header-right { display: flex; gap: 10px; align-items: center; }
+  .badge {
+    padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .badge.paper { color: var(--green); border-color: var(--green); }
+  .badge.live { color: #fff; background: var(--red); border-color: var(--red); }
+  .chip {
+    padding: 2px 10px; border-radius: 12px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .chip.risk-on { color: var(--green); border-color: var(--green); }
+  .chip.risk-off { color: var(--red); border-color: var(--red); }
+  .chip.neutral { color: var(--yellow); border-color: var(--yellow); }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  .count {
+    background: var(--red); color: #fff; border-radius: 10px; padding: 0 6px;
+    font-size: 11px; margin-left: 4px;
+  }
+  .hidden { display: none !important; }
+  #banner {
+    padding: 7px 18px; font-size: 13px; border-bottom: 1px solid var(--border);
+  }
+  #banner.warn { background: #3a2d12; color: #e3b341; }
+  #banner.info { background: #122a3a; color: #79c0ff; }
+  nav#tabs {
+    display: flex; gap: 4px; padding: 8px 14px 0; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  nav#tabs button {
+    border: 1px solid transparent; border-bottom: none; background: none;
+    color: var(--muted); padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 14px;
+  }
+  nav#tabs button.active {
+    background: var(--bg); color: var(--text); border-color: var(--border);
+    font-weight: 600;
+  }
+  main { padding: 18px; max-width: 1280px; margin: 0 auto; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .info { color: var(--muted); font-size: 12.5px; }
+  .toolbar select { max-width: 220px; }
+  .toolbar .price-input { width: 80px; }
+  .ticker-sector { color: var(--muted); font-size: 10.5px; margin-left: 13px; margin-top: 1px; }
+  .seg-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  button.seg { border: none; border-radius: 0; background: var(--panel); color: var(--muted); padding: 5px 11px; }
+  button.seg.active { background: #1f6feb; color: #fff; }
+  button.seg:hover { border: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th.sortable { cursor: pointer; user-select: none; color: var(--accent); white-space: nowrap; }
+  th.sortable:hover { text-decoration: underline; }
+  th.sortable.active { color: var(--text); font-weight: 700; }
+  /* sort direction drawn with CSS borders (no glyph/font dependency) */
+  .caret { display: inline-block; width: 0; height: 0; margin-left: 5px; vertical-align: middle;
+           border-left: 4px solid transparent; border-right: 4px solid transparent; }
+  .caret.down { border-top: 5px solid var(--accent); }
+  .caret.up { border-bottom: 5px solid var(--accent); }
+  /* row expand/collapse twist (muted, rotates open) */
+  .twist { display: inline-block; width: 0; height: 0; margin-right: 7px; vertical-align: middle;
+           border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+           border-left: 6px solid var(--muted); transition: transform .12s ease; }
+  .twist.open { transform: rotate(90deg); }
+  .more { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  tr.open > td { background: var(--panel2); }
+  .ladder > td { background: var(--panel2); padding: 4px 14px 12px; }
+  .ladder table { font-size: 12.5px; }
+  .ladder thead th { background: var(--panel2); }
+  .legend { color: var(--muted); font-size: 12px; margin: 0 0 10px; line-height: 1.5; }
+  thead th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: var(--panel2); }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  .score-pill {
+    display: inline-block; min-width: 44px; text-align: center; padding: 1px 8px;
+    border-radius: 10px; font-weight: 700; font-family: ui-monospace, Menlo, monospace;
+  }
+  .score-hi { background: #12361f; color: var(--green); }
+  .score-mid { background: #3a2d12; color: var(--yellow); }
+  .score-lo { background: #3a1518; color: var(--red); }
+  .breakdown { background: var(--panel2); }
+  .breakdown td { padding: 10px 14px; }
+  .breakdown table { font-size: 12.5px; }
+  .bar-track { background: var(--border); height: 7px; border-radius: 4px; width: 110px; display: inline-block; vertical-align: middle; }
+  .bar-fill { background: var(--accent); height: 7px; border-radius: 4px; display: block; }
+  .grid { display: grid; gap: 14px; }
+  .grid.cols2 { grid-template-columns: 1fr 1fr; }
+  .grid.cols3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 900px) {
+    .grid.cols2 { grid-template-columns: 1fr; }
+    .grid.cols3 { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .stat-card .label { color: var(--muted); font-size: 12px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+  .regime-score { font-size: 52px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; }
+  .regime-label { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+  .component { margin-bottom: 12px; }
+  .component .head { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .component .detail { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .note { color: var(--yellow); font-size: 12px; }
+  input[type=text], input[type=number] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  textarea.notes {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 6px; font-size: 12px; width: 200px; height: 38px;
+  }
+  /* modal */
+  #modal-root {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    width: 560px; max-width: 100%; max-height: 90vh; overflow-y: auto; padding: 18px 20px;
+  }
+  .modal h2 { margin: 0 0 4px; font-size: 17px; }
+  .modal .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 10px 0; }
+  .kv div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding: 3px 0; font-size: 13px; }
+  .kv div span:first-child { color: var(--muted); }
+  .live-warning {
+    background: #3a1518; border: 1px solid var(--red); color: #ffb3ae;
+    padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: 13px;
+  }
+  .order-result { background: var(--panel2); border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+  /* alerts panel + toasts */
+  #alerts-panel {
+    position: fixed; top: 52px; right: 14px; width: 380px; max-height: 60vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    z-index: 40; padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  .alert-item { border-bottom: 1px solid var(--border); padding: 7px 2px; font-size: 12.5px; }
+  .alert-item .when { color: var(--muted); font-size: 11px; }
+  #toasts { position: fixed; bottom: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--panel2); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; max-width: 360px; box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  .toast.err { border-color: var(--red); }
+  .empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+  a { color: var(--accent); }
+
+  /* theme multi-select */
+  .theme-ms { position: relative; display: inline-block; }
+  .theme-ms-btn {
+    max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; height: 32px;
+  }
+  .theme-ms-btn.active { border-color: var(--accent); color: var(--accent); }
+  .theme-ms-panel {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    width: 270px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .theme-ms-search {
+    width: calc(100% - 16px); margin: 8px; display: block; box-sizing: border-box;
+  }
+  .theme-ms-list { max-height: 210px; overflow-y: auto; padding: 0 8px 4px; }
+  .theme-ms-item {
+    display: flex; align-items: center; gap: 7px; padding: 3px 2px;
+    font-size: 12.5px; cursor: pointer; border-radius: 4px;
+  }
+  .theme-ms-item:hover { background: var(--panel2); }
+  .theme-ms-item.hidden { display: none; }
+  .theme-ms-item input[type=checkbox] { flex-shrink: 0; accent-color: var(--accent); }
+  .theme-ms-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px; border-top: 1px solid var(--border);
+  }
+
+  /* scoring presets */
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .preset-btn {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* settings */
+  .set-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .set-row:last-child { border-bottom: none; }
+  .set-label { flex: 1 1 auto; font-size: 13.5px; }
+  .set-use { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+  .set-row input, .set-row select { flex: 0 0 260px; max-width: 50%; }
+  .set-status { flex: 0 0 56px; text-align: center; font-size: 11.5px; padding: 2px 0; border-radius: 10px; border: 1px solid var(--border); }
+  .set-status.ok { color: var(--green); border-color: var(--green); }
+  .set-status.off { color: var(--muted); }
+  .set-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  @media (max-width: 700px) {
+    .set-row { flex-wrap: wrap; }
+    .set-row input, .set-row select { flex: 1 1 100%; max-width: 100%; }
+    .set-status { flex: 0 0 auto; }
+  }
+
+  /* data tables scroll horizontally instead of breaking the layout */
+  #recs-table, #watchlist-table, #positions-table, #journal-table, #regime-history {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+
+  /* phone layout */
+  @media (max-width: 700px) {
+    header { padding: 8px 10px; gap: 6px; }
+    .brand { font-size: 13px; letter-spacing: 0.5px; }
+    .header-right { gap: 6px; }
+    #regime-chip { display: none; }
+    nav#tabs {
+      overflow-x: auto; flex-wrap: nowrap; padding: 8px 8px 0;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    nav#tabs::-webkit-scrollbar { display: none; }
+    nav#tabs button { flex: 0 0 auto; padding: 9px 11px; font-size: 13.5px; }
+    main { padding: 10px; }
+    .panel { padding: 10px 12px; }
+    button { min-height: 38px; }
+    button.small { min-height: 30px; }
+    /* 16px inputs stop iOS Safari from zooming the page on focus */
+    input[type=text], input[type=number], textarea.notes { font-size: 16px; }
+    .regime-score { font-size: 42px; }
+    .regime-label { font-size: 17px; }
+    .modal { width: 100%; max-height: 94vh; padding: 14px 14px; }
+    .kv { grid-template-columns: 1fr; }
+    #alerts-panel { left: 8px; right: 8px; width: auto; top: 56px; }
+    .toast { max-width: calc(100vw - 40px); }
+    textarea.notes { width: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">OPTIONS PLATFORM<span class="ver" id="version"></span></div>
+  <div class="header-right">
+    <span class="chip" id="regime-chip">regime: --</span>
+    <span class="badge" id="mode-badge">--</span>
+    <button id="alerts-btn" onclick="toggleAlertsPanel()">Alerts<span class="count hidden" id="alerts-count">0</span></button>
+  </div>
+</header>
+
+<div id="banner" class="hidden"></div>
+
+<div id="alerts-panel" class="hidden">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+    <strong>Alerts</strong>
+    <button class="small" onclick="markAlertsSeen()">Mark all read</button>
+  </div>
+  <div class="mut" id="alerts-loop-status" style="font-size:11.5px; margin-bottom:6px;"></div>
+  <div id="alerts-list"><div class="empty">No alerts yet</div></div>
+</div>
+
+<nav id="tabs">
+  <button data-tab="regime" class="active" onclick="showTab('regime')">Market Regime</button>
+  <button data-tab="recs" onclick="showTab('recs')">Recommendations</button>
+  <button data-tab="watchlist" onclick="showTab('watchlist')">Watchlist</button>
+  <button data-tab="positions" onclick="showTab('positions')">Positions</button>
+  <button data-tab="journal" onclick="showTab('journal')">Journal</button>
+  <button data-tab="validation" onclick="showTab('validation')">Validation</button>
+  <button data-tab="settings" onclick="showTab('settings')">Settings</button>
+</nav>
+
+<main>
+  <!-- ============================== REGIME =============================== -->
+  <section id="tab-regime">
+    <div class="grid cols2">
+      <div class="panel" id="regime-main"><div class="empty">Loading regime...</div></div>
+      <div class="panel">
+        <h3>Components</h3>
+        <div id="regime-components"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Daily snapshots</h3>
+      <div id="regime-history"><div class="empty">Loading...</div></div>
+    </div>
+  </section>
+
+  <!-- =========================== RECOMMENDATIONS ========================= -->
+  <section id="tab-recs" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <button class="primary" id="scan-btn" onclick="loadRecs(true)">Refresh Scan</button>
+        <div class="theme-ms" id="sector-ms-wrap">
+          <button type="button" class="theme-ms-btn" id="sector-ms-btn"
+                  onclick="toggleSectorMs(event)" title="Segment by sector">All sectors</button>
+          <div class="theme-ms-panel hidden" id="sector-ms-panel">
+            <div class="theme-ms-list" id="sector-ms-list"></div>
+            <div class="theme-ms-foot">
+              <button class="small" type="button" onclick="clearSectorMs()">Clear</button>
+              <span id="sector-ms-count" class="mut" style="font-size:11.5px"></span>
+            </div>
+          </div>
+        </div>
+        <div class="theme-ms" id="theme-ms-wrap">
+          <button type="button" class="theme-ms-btn" id="theme-ms-btn"
+                  onclick="toggleThemeMs(event)" title="Segment by Finviz themes">All themes</button>
+          <div class="theme-ms-panel hidden" id="theme-ms-panel">
+            <input type="search" class="theme-ms-search" id="theme-ms-search"
+                   placeholder="Search 408 themes..." oninput="filterThemeMs()" autocomplete="off">
+            <div class="theme-ms-list" id="theme-ms-list"></div>
+            <div class="theme-ms-foot">
+              <button class="small" type="button" onclick="clearThemeMs()">Clear</button>
+              <span id="theme-ms-count" class="mut" style="font-size:11.5px"></span>
+            </div>
+          </div>
+        </div>
+        <select id="filter-dte" onchange="onFilterChange()" title="Target days to expiry">
+          <option value="">DTE: default</option>
+        </select>
+        <input type="number" id="filter-price-min" class="price-input" placeholder="Min $"
+               min="0" step="1" inputmode="decimal" onchange="onFilterChange()"
+               title="Minimum underlying share price">
+        <input type="number" id="filter-price-max" class="price-input" placeholder="Max $"
+               min="0" step="1" inputmode="decimal" onchange="onFilterChange()"
+               title="Maximum underlying share price">
+        <button class="small" id="filter-clear" onclick="clearFilters()" style="display:none">Clear</button>
+        <span class="seg-group">
+          <button class="seg active" id="view-grouped" onclick="setView('grouped')">By ticker</button>
+          <button class="seg" id="view-flat" onclick="setView('flat')">Top contracts</button>
+        </span>
+        <select id="flat-limit" onchange="setFlatLimit()" style="display:none" title="How many contracts to show">
+          <option value="10">Top 10</option>
+          <option value="25">Top 25</option>
+          <option value="50">Top 50</option>
+          <option value="0">All</option>
+        </select>
+        <button class="small" id="copy-tickers" onclick="copyTickers()"
+                title="Copy the result tickers as a comma-separated list for TradingView">Copy tickers</button>
+        <span class="info" id="recs-info"></span>
+      </div>
+      <div class="legend">
+        <strong>Score</strong> (0-100) ranks each contract by your scoring config:
+        delta fit, extrinsic %, spread tightness, open interest, volume, IV rank,
+        days-to-expiry, and trend/regime alignment. Higher is a better fit.
+        <strong>By ticker</strong> shows each ticker's best contract (click to
+        expand its full option ladder). <strong>Top contracts</strong> is a flat
+        ranked list across all tickers (duplicates allowed) you can sort by any
+        column - e.g. Delta or DTE - and cap to the top 10/25/50. Click any row
+        for its score breakdown.
+      </div>
+      <div id="recs-table"><div class="empty">Loading recommendations...</div></div>
+      <div id="recs-degraded" class="note" style="margin-top:8px;"></div>
+    </div>
+  </section>
+
+  <!-- ============================== WATCHLIST ============================ -->
+  <section id="tab-watchlist" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="watch-input" placeholder="Ticker (e.g. NVDA)" maxlength="10"
+               onkeydown="if(event.key==='Enter')addWatch()">
+        <button class="primary" onclick="addWatch()">Add</button>
+      </div>
+      <div id="watchlist-table"><div class="empty">Loading watchlist...</div></div>
+    </div>
+  </section>
+
+  <!-- ============================== POSITIONS ============================ -->
+  <section id="tab-positions" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <button onclick="loadPositions()">Refresh</button>
+        <span class="info" id="positions-info"></span>
+      </div>
+      <div id="positions-table"><div class="empty">Loading positions...</div></div>
+    </div>
+  </section>
+
+  <!-- =============================== JOURNAL ============================= -->
+  <section id="tab-journal" class="hidden">
+    <div class="grid cols3" id="journal-stats"></div>
+    <div class="panel" style="margin-top:14px;">
+      <div class="toolbar">
+        <button onclick="loadJournal()">Refresh</button>
+        <span class="info">Orders are auto-logged at submit time with the regime and score snapshot.</span>
+      </div>
+      <div id="journal-table"><div class="empty">No journal entries yet</div></div>
+    </div>
+  </section>
+
+  <!-- ============================== VALIDATION =========================== -->
+  <section id="tab-validation" class="hidden">
+    <div class="panel">
+      <h3>Does the score work? (forward validation)</h3>
+      <div class="set-note">
+        Historical option data isn't available on these feeds, so this measures the
+        score's edge <strong>going forward</strong>: it snapshots top-scoring contracts
+        with their entry price, then re-quotes them over the following days and records
+        the realized option return. If the score has edge, higher-score buckets should
+        show better average returns. <strong>This needs days to weeks of data to mean
+        anything</strong> - one snapshot proves nothing. It runs
+        <strong>automatically once per market day</strong> while the server is up (snapshot
+        + outcome update); the buttons below are for on-demand runs.
+      </div>
+      <div class="toolbar" style="margin-top:10px;">
+        <button class="primary" onclick="trackingSnapshot()" id="track-snap">Snapshot top picks now</button>
+        <button onclick="trackingUpdate()" id="track-update">Update outcomes</button>
+        <span class="info" id="track-info"></span>
+      </div>
+      <div class="set-note" id="track-source"></div>
+    </div>
+    <div class="grid cols3" id="track-summary"></div>
+    <div class="panel" style="margin-top:14px;">
+      <h3>Realized return by entry-score bucket</h3>
+      <div id="track-buckets"><div class="empty">No tracked outcomes yet. Snapshot some picks, then update outcomes after a few days.</div></div>
+    </div>
+    <div class="panel">
+      <h3>Tracked entries</h3>
+      <div id="track-table"><div class="empty">Nothing tracked yet.</div></div>
+    </div>
+  </section>
+
+  <!-- =============================== SETTINGS ============================ -->
+  <section id="tab-settings" class="hidden">
+    <div id="settings-body"><div class="empty">Loading settings...</div></div>
+  </section>
+</main>
+
+<div id="modal-root" class="hidden"></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+
+/* ------------------------------ utilities ------------------------------ */
+
+const $ = (sel) => document.querySelector(sel);
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+function money(x, digits = 2) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return "$" + Number(x).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function num(x, digits = 2) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return Number(x).toFixed(digits);
+}
+function pct01(x, digits = 1) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  return (Number(x) * 100).toFixed(digits) + "%";
+}
+function signed(x, digits = 2, suffix = "") {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  const v = Number(x);
+  const cls = v > 0 ? "pos" : v < 0 ? "neg" : "mut";
+  const sign = v > 0 ? "+" : "";
+  return `<span class="${cls}">${sign}${v.toFixed(digits)}${suffix}</span>`;
+}
+function signedMoney(x) {
+  if (x === null || x === undefined || isNaN(x)) return "-";
+  const v = Number(x);
+  const cls = v > 0 ? "pos" : v < 0 ? "neg" : "mut";
+  const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+  return `<span class="${cls}">${sign}${money(Math.abs(v))}</span>`;
+}
+function scorePill(score) {
+  if (score === null || score === undefined) return "-";
+  const cls = score >= 70 ? "score-hi" : score >= 50 ? "score-mid" : "score-lo";
+  return `<span class="score-pill ${cls}">${Number(score).toFixed(1)}</span>`;
+}
+function toast(msg, isErr = false) {
+  const div = document.createElement("div");
+  div.className = "toast" + (isErr ? " err" : "");
+  div.textContent = msg;
+  $("#toasts").appendChild(div);
+  setTimeout(() => div.remove(), 6500);
+}
+
+/* Demo mode: active on GitHub Pages (no backend) or with ?demo=1.
+   Serves realistic sample data; order submission is disabled. */
+const DEMO = location.hostname.endsWith("github.io")
+  || new URLSearchParams(location.search).has("demo");
+
+/* Optional dashboard token (set DASHBOARD_TOKEN in .env when binding
+   HOST=0.0.0.0). First visit with ?key=... stores it, then it travels in a
+   header so the URL stays clean. */
+const TOKEN = (() => {
+  const params = new URLSearchParams(location.search);
+  const fromUrl = params.get("key");
+  if (fromUrl) {
+    localStorage.setItem("dash_token", fromUrl);
+    params.delete("key");
+    const rest = params.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
+  }
+  return localStorage.getItem("dash_token");
+})();
+
+async function api(path, opts = {}) {
+  if (DEMO) return demoApi(path, opts);
+  const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" };
+  if (TOKEN) headers["X-Dashboard-Token"] = TOKEN;
+  const res = await fetch("/api" + path, { headers, ...opts });
+  if (!res.ok) {
+    let detail = "HTTP " + res.status;
+    try { detail = (await res.json()).detail || detail; } catch (e) { /* keep default */ }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+/* ------------------------------ demo data ------------------------------ */
+
+function dComp(name, raw, score, weight, note) {
+  return { name, raw, score, weight,
+           contribution: +(score * weight).toFixed(4), note: note || null };
+}
+
+function dRec(u, exp, dte, strike, delta, mid, sprPct, oi, vol, iv, ivr, spot, trend, s) {
+  const comps = [
+    dComp("delta_fit", delta, s.delta, 0.2),
+    dComp("extrinsic", s.extRaw, s.ext, 0.15, "extrinsic premium / mid"),
+    dComp("spread", sprPct, s.spr, 0.15, "(ask - bid) / mid"),
+    dComp("open_interest", oi, s.oi, 0.1),
+    dComp("volume", vol, s.vol, 0.1),
+    dComp("iv_rank", ivr, ivr === null ? 0.5 : +(1 - ivr).toFixed(3), 0.1,
+          ivr === null ? "insufficient IV history - neutral 0.5 applied" : null),
+    dComp("dte_fit", dte, s.dte, 0.1),
+    dComp("trend_alignment", s.align, s.align, 0.1,
+          `underlying trend ${trend} blended with regime 0.72`),
+  ];
+  const total = +(comps.reduce((sum, c) => sum + c.contribution, 0) * 100).toFixed(1);
+  const occ = u + exp.replaceAll("-", "").slice(2) + "C" +
+    String(Math.round(strike * 1000)).padStart(8, "0");
+  return {
+    occ_symbol: occ, underlying: u, type: "call", strike, expiration: exp, dte,
+    bid: +(mid - mid * sprPct / 2).toFixed(2), ask: +(mid + mid * sprPct / 2).toFixed(2),
+    mid, last: mid, volume: vol, open_interest: oi, iv, iv_rank: ivr,
+    delta, gamma: 0.012, theta: -0.085, vega: 0.21, spot,
+    spread_pct: sprPct, trend01: trend, score: total, components: comps,
+  };
+}
+
+const DEMO_BASE = {
+  health: {
+    version: "1.3-demo", broker: "alpaca", data_source: "alpaca", mode: "paper",
+    live_trading_enabled: false,
+    scan_loop: { enabled: true, interval_minutes: 15, threshold: 75,
+                 market_hours_only: true, running: true, runs: 12,
+                 last_run: "2026-06-10T11:15:02-04:00", last_skip: null,
+                 last_error: null, last_new_alerts: 2 },
+    providers: { fmp: { configured: true }, alpaca: { configured: true },
+                 public: { configured: false } },
+  },
+  regime: {
+    as_of: "2026-06-10T11:30:00-04:00", date: "2026-06-10",
+    score: 71.5, label: "risk-on", degraded: false, stale: false,
+    components: {
+      spy_trend: { score: 1.0, weight: 0.35, degraded: false, stale: false, note: null,
+        detail: { price: 612.4, ema10: 608.1, ema20: 602.7, ema50: 594.3,
+                  ema50_rising: true, checks_used: 4, source: "alpaca" } },
+      breadth: { score: 0.63, weight: 0.25, degraded: false, stale: false, note: null,
+        detail: { universe: "10/15 positive", sectors: "7/11 positive" } },
+      vix: { score: 0.58, weight: 0.25, degraded: false, stale: false, note: null,
+        detail: { level: 16.8, level_score: 0.82, change_pct_lookback: 4.1,
+                  direction_score: 0.295 } },
+      sector_rotation: { score: 0.71, weight: 0.15, degraded: false, stale: false, note: null,
+        detail: { offensive_avg_pct: 0.64, defensive_avg_pct: 0.22, diff_pct: 0.42 } },
+    },
+  },
+  regimeHistory: [
+    { date: "2026-06-10", score: 71.5, label: "risk-on", created_at: "2026-06-10T11:30:00-04:00" },
+    { date: "2026-06-09", score: 68.2, label: "risk-on", created_at: "2026-06-09T16:00:01-04:00" },
+    { date: "2026-06-08", score: 61.0, label: "neutral", created_at: "2026-06-08T16:00:01-04:00" },
+    { date: "2026-06-05", score: 55.4, label: "neutral", created_at: "2026-06-05T16:00:02-04:00" },
+    { date: "2026-06-04", score: 38.9, label: "risk-off", created_at: "2026-06-04T16:00:01-04:00" },
+    { date: "2026-06-03", score: 42.7, label: "neutral", created_at: "2026-06-03T16:00:01-04:00" },
+  ],
+  recs: [
+    // NVDA ladder - several strikes/expiries so the demo shows a full ladder
+    dRec("NVDA", "2026-07-17", 37, 170, 0.72, 14.25, 0.021, 4521, 1893, 0.41, 0.35, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.071, ext: 1.0, spr: 0.987, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-07-17", 37, 175, 0.66, 11.40, 0.024, 3980, 1620, 0.42, 0.36, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.21, ext: 0.62, spr: 0.96, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-08-21", 72, 170, 0.70, 18.05, 0.028, 2110, 540, 0.40, 0.33, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.34, ext: 0.30, spr: 0.93, oi: 1.0, vol: 0.55, dte: 0.6, align: 0.888 }),
+    dRec("NVDA", "2026-07-17", 37, 165, 0.78, 17.60, 0.02, 2890, 980, 0.41, 0.34, 182.4, 1.0,
+         { delta: 0.87, extRaw: 0.03, ext: 1.0, spr: 1.0, oi: 1.0, vol: 0.95, dte: 1.0, align: 0.888 }),
+    dRec("NVDA", "2026-06-26", 16, 180, 0.66, 8.20, 0.03, 1500, 900, 0.45, 0.40, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.28, ext: 0.40, spr: 0.92, oi: 1.0, vol: 0.95, dte: 0.40, align: 0.888 }),
+    dRec("NVDA", "2027-01-15", 219, 170, 0.70, 30.50, 0.04, 800, 120, 0.38, 0.30, 182.4, 1.0,
+         { delta: 1.0, extRaw: 0.45, ext: 0.0, spr: 0.88, oi: 0.40, vol: 0.20, dte: 0.0, align: 0.888 }),
+    dRec("MSFT", "2026-07-17", 37, 480, 0.68, 28.4, 0.018, 2310, 640, 0.24, 0.22, 502.1, 1.0,
+         { delta: 1.0, extRaw: 0.221, ext: 0.596, spr: 1.0, oi: 1.0, vol: 0.636, dte: 1.0, align: 0.888 }),
+    dRec("MSFT", "2026-08-21", 72, 490, 0.63, 24.9, 0.022, 1450, 380, 0.25, 0.24, 502.1, 1.0,
+         { delta: 1.0, extRaw: 0.27, ext: 0.43, spr: 0.96, oi: 0.78, vol: 0.39, dte: 0.6, align: 0.888 }),
+    dRec("AAPL", "2026-07-24", 44, 210, 0.65, 19.8, 0.02, 2100, 950, 0.28, null, 224.1, 0.75,
+         { delta: 1.0, extRaw: 0.288, ext: 0.373, spr: 1.0, oi: 1.0, vol: 0.949, dte: 1.0, align: 0.738 }),
+    dRec("SPY", "2026-07-17", 37, 595, 0.71, 24.1, 0.012, 8804, 3120, 0.17, 0.41, 612.4, 1.0,
+         { delta: 1.0, extRaw: 0.278, ext: 0.407, spr: 1.0, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("SPY", "2026-07-17", 37, 600, 0.66, 20.6, 0.011, 12500, 4400, 0.16, 0.40, 612.4, 1.0,
+         { delta: 1.0, extRaw: 0.39, ext: 0.05, spr: 1.0, oi: 1.0, vol: 1.0, dte: 1.0, align: 0.888 }),
+    dRec("META", "2026-07-24", 44, 690, 0.66, 48.2, 0.034, 980, 410, 0.36, 0.55, 731.5, 0.75,
+         { delta: 1.0, extRaw: 0.139, ext: 0.87, spr: 0.825, oi: 0.463, vol: 0.404, dte: 1.0, align: 0.738 }),
+    dRec("AMD", "2026-07-17", 37, 150, 0.61, 19.6, 0.046, 1450, 720, 0.52, 0.78, 166.2, 0.5,
+         { delta: 1.0, extRaw: 0.173, ext: 0.757, spr: 0.675, oi: 0.711, vol: 0.717, dte: 1.0, align: 0.588 }),
+  ],
+  account: { account: { status: "ACTIVE", currency: "USD", equity: 100000,
+    cash: 38250, buying_power: 76500, options_buying_power: 38250,
+    options_approved_level: 2, paper: true }, broker: "alpaca", stale: false,
+    as_of: "2026-06-10T11:30:00" },
+  positions: { broker: "alpaca", stale: false, as_of: "2026-06-10T11:30:00", positions: [
+    { symbol: "NVDA260717C00170000", asset_class: "us_option", qty: 2, side: "long",
+      avg_entry_price: 12.1, current_price: 14.25, market_value: 2850,
+      cost_basis: 2420, unrealized_pl: 430, unrealized_plpc: 17.77 },
+    { symbol: "SPY260717C00595000", asset_class: "us_option", qty: 1, side: "long",
+      avg_entry_price: 25.4, current_price: 24.1, market_value: 2410,
+      cost_basis: 2540, unrealized_pl: -130, unrealized_plpc: -5.12 },
+    { symbol: "AAPL", asset_class: "us_equity", qty: 50, side: "long",
+      avg_entry_price: 198.2, current_price: 224.1, market_value: 11205,
+      cost_basis: 9910, unrealized_pl: 1295, unrealized_plpc: 13.07 },
+  ]},
+  journal: [
+    { id: 4, created_at: "2026-06-10T10:02:11", order_id: "demo-4", occ_symbol: "NVDA260717C00170000",
+      underlying: "NVDA", side: "buy", qty: 2, limit_price: 12.1, status: "filled",
+      filled_avg_price: 12.08, regime_label: "risk-on", regime_score: 68.2, score_total: 87.3,
+      score_breakdown: null, notes: "Breakout over 180 with sector strength.",
+      closed_at: null, exit_price: null, realized_pnl: null, paper: 1, broker: "alpaca" },
+    { id: 3, created_at: "2026-06-09T13:44:50", order_id: "demo-3", occ_symbol: "SPY260717C00595000",
+      underlying: "SPY", side: "buy", qty: 1, limit_price: 25.4, status: "filled",
+      filled_avg_price: 25.4, regime_label: "risk-on", regime_score: 66.0, score_total: 81.0,
+      score_breakdown: null, notes: "", closed_at: null, exit_price: null,
+      realized_pnl: null, paper: 1, broker: "alpaca" },
+    { id: 2, created_at: "2026-06-04T11:20:33", order_id: "demo-2", occ_symbol: "AMD260619C00150000",
+      underlying: "AMD", side: "buy", qty: 3, limit_price: 9.8, status: "filled",
+      filled_avg_price: 9.75, regime_label: "risk-off", regime_score: 38.9, score_total: 64.2,
+      score_breakdown: null, notes: "Counter-regime entry - sized down.",
+      closed_at: "2026-06-06T14:05:00", exit_price: 8.1, realized_pnl: -495,
+      paper: 1, broker: "alpaca" },
+    { id: 1, created_at: "2026-05-28T09:50:12", order_id: "demo-1", occ_symbol: "MSFT260619C00470000",
+      underlying: "MSFT", side: "buy", qty: 2, limit_price: 21.0, status: "filled",
+      filled_avg_price: 20.9, regime_label: "risk-on", regime_score: 70.1, score_total: 85.6,
+      score_breakdown: null, notes: "Earnings drift play.",
+      closed_at: "2026-06-05T15:30:00", exit_price: 27.4, realized_pnl: 1300,
+      paper: 1, broker: "alpaca" },
+  ],
+  watchlist: [
+    { symbol: "COIN", added_at: "2026-06-02T09:00:00", price: 312.4, change_pct: 2.84, above_ma50: true, above_ma200: true },
+    { symbol: "PLTR", added_at: "2026-05-20T09:00:00", price: 148.9, change_pct: -1.12, above_ma50: true, above_ma200: true },
+    { symbol: "TSLA", added_at: "2026-05-12T09:00:00", price: 287.3, change_pct: 0.44, above_ma50: false, above_ma200: true },
+  ],
+  alerts: [
+    { id: 2, created_at: "2026-06-10T11:15:02", date: "2026-06-10", occ_symbol: "NVDA260717C00170000",
+      underlying: "NVDA", score: 87.3, seen: 0, payload: null },
+    { id: 1, created_at: "2026-06-10T09:47:18", date: "2026-06-10", occ_symbol: "SPY260717C00595000",
+      underlying: "SPY", score: 81.0, seen: 0, payload: null },
+  ],
+};
+
+const DEMO_SECTOR = { NVDA: "Technology", MSFT: "Technology", AAPL: "Technology",
+                      META: "Communication", AMD: "Technology", SPY: null };
+const DEMO_THEMES = {
+  "Artificial Intelligence": ["NVDA", "AMD", "MSFT", "META"],
+  "Semiconductors": ["NVDA", "AMD"],
+  "Mega Cap Tech": ["AAPL", "MSFT", "NVDA", "META"],
+};
+const DEMO_DTE_PRESETS = [
+  { key: "zero_one", label: "0-1 DTE (0DTE)", min: 0, max: 1 },
+  { key: "closer", label: "Closer (7-25d)", min: 7, max: 25 },
+  { key: "standard", label: "Standard (25-60d)", min: 25, max: 60 },
+  { key: "swing", label: "Swing (45-90d)", min: 45, max: 90 },
+  { key: "further", label: "Further out (90-180d)", min: 90, max: 180 },
+  { key: "leaps", label: "LEAPS (180-400d)", min: 180, max: 400 },
+];
+
+let demoState = null;
+
+async function demoApi(path, opts = {}) {
+  if (!demoState) demoState = JSON.parse(JSON.stringify(DEMO_BASE));
+  const method = (opts.method || "GET").toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  await new Promise((r) => setTimeout(r, 120));
+  const d = demoState;
+
+  if (path.startsWith("/health")) return d.health;
+  if (path.startsWith("/regime/history")) return d.regimeHistory;
+  if (path.startsWith("/regime")) return d.regime;
+  if (path.startsWith("/segments")) {
+    const counts = {};
+    Object.values(DEMO_SECTOR).forEach((s) => { if (s && s !== "Healthcare") counts[s] = (counts[s] || 0) + 1; });
+    return {
+      sectors: Object.entries(counts).map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+      themes: Object.entries(DEMO_THEMES).map(([name, m]) => ({ name, count: m.length })),
+      dte_presets: DEMO_DTE_PRESETS,
+    };
+  }
+  if (path.startsWith("/recommendations")) {
+    const params = new URLSearchParams((path.split("?")[1]) || "");
+    const sectors = params.getAll("sector"), themes = params.getAll("theme"), dte = params.get("dte");
+    const priceMin = params.get("price_min"), priceMax = params.get("price_max");
+    const dteBand = dte ? DEMO_DTE_PRESETS.find((p) => p.key === dte) : null;
+    let recs = d.recs.filter((r) => DEMO_SECTOR[r.underlying] !== "Healthcare");
+    if (sectors.length) recs = recs.filter((r) => sectors.includes(DEMO_SECTOR[r.underlying]));
+    if (themes.length) {
+      const members = new Set(themes.flatMap((t) => DEMO_THEMES[t] || []));
+      recs = recs.filter((r) => members.has(r.underlying));
+    }
+    if (dteBand) recs = recs.filter((r) => r.dte >= dteBand.min && r.dte <= dteBand.max);
+    if (priceMin) recs = recs.filter((r) => r.spot >= +priceMin);
+    if (priceMax) recs = recs.filter((r) => r.spot <= +priceMax);
+    const map = {};
+    [...recs].sort((a, b) => b.score - a.score).forEach((r) => {
+      (map[r.underlying] = map[r.underlying] || []).push(r);
+    });
+    const groups = Object.entries(map).map(([underlying, contracts]) => ({
+      underlying, sector: DEMO_SECTOR[underlying] || null,
+      best: contracts[0], best_score: contracts[0].score,
+      count: contracts.length, contracts,
+    })).sort((a, b) => b.best_score - a.best_score);
+    const results = groups.flatMap((g) => g.contracts);
+    const fullUniverse = sectors.length || themes.length ? Math.max(40, results.length * 9) : 2587;
+    return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
+             universe_size: fullUniverse, tickers_scanned: Math.min(40, groups.length || 40),
+             segment: { sector: sectors.length === 1 ? sectors[0] : (sectors.length ? sectors : null),
+                        sectors: sectors,
+                        themes: themes.length ? themes : null,
+                        theme: themes.length === 1 ? themes[0] : null,
+                        dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null,
+                        weight_profile: (dte && dte !== "default") ? dte : "default",
+                        price_min: priceMin ? +priceMin : null, price_max: priceMax ? +priceMax : null },
+             prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
+             contracts_scanned: 412, contracts_kept: results.length,
+             tickers_with_picks: groups.length,
+             dropped: { "spread too wide": 12, "open interest below minimum": 9 },
+             groups, results, degraded: [], stale: false };
+  }
+  if (path.startsWith("/watchlist")) {
+    const symbol = decodeURIComponent(path.split("/")[2] || "").toUpperCase();
+    if (method === "POST") {
+      if (symbol && !d.watchlist.some((w) => w.symbol === symbol)) {
+        d.watchlist.unshift({ symbol, added_at: "2026-06-10T12:00:00",
+          price: null, change_pct: null, above_ma50: null, above_ma200: null });
+      }
+      return { ok: true, symbol };
+    }
+    if (method === "DELETE") {
+      d.watchlist = d.watchlist.filter((w) => w.symbol !== symbol);
+      return { ok: true };
+    }
+    return { items: d.watchlist, stale: false, error: null };
+  }
+  if (path.startsWith("/positions")) return d.positions;
+  if (path.startsWith("/account")) return d.account;
+  if (path.startsWith("/orders/preview")) {
+    const row = d.recs.find((r) => r.occ_symbol === body.occ_symbol) || d.recs[0];
+    return { occ_symbol: row.occ_symbol, underlying: row.underlying, broker: "alpaca",
+             bid: row.bid, ask: row.ask, mid: row.mid, limit_price: row.mid,
+             equity: 100000, stale_account: false, max_risk_pct_equity: 1.0,
+             max_risk_dollars: 1000, suggested_qty: Math.max(1, Math.floor(1000 / (row.mid * 100))),
+             max_contracts_per_order: 10, est_max_loss: +(row.mid * 100).toFixed(2),
+             score_snapshot: { score: row.score }, mode: "paper",
+             live_blocked_by_env: false,
+             warnings: ["DEMO MODE - the confirm button will not place a real order"] };
+  }
+  if (path.startsWith("/orders")) {
+    throw new Error("Demo mode: order submission is disabled. Run the platform locally with your own keys (paper by default) to trade.");
+  }
+  if (path.startsWith("/journal/stats")) {
+    const closed = d.journal.filter((j) => j.closed_at);
+    const wins = closed.filter((j) => (j.realized_pnl || 0) > 0);
+    const grossProfit = wins.reduce((s, j) => s + j.realized_pnl, 0);
+    const grossLoss = Math.abs(closed.filter((j) => (j.realized_pnl || 0) < 0)
+      .reduce((s, j) => s + j.realized_pnl, 0));
+    return { open: d.journal.length - closed.length, closed: closed.length,
+             win_rate: closed.length ? +(wins.length / closed.length).toFixed(3) : null,
+             profit_factor: grossLoss > 0 ? +(grossProfit / grossLoss).toFixed(2) : (wins.length ? "inf" : null),
+             gross_profit: grossProfit, gross_loss: grossLoss,
+             net_pnl: +(grossProfit - grossLoss).toFixed(2), avg_hold_days: 4.6 };
+  }
+  if (path.startsWith("/journal/")) {
+    const id = parseInt(path.split("/")[2], 10);
+    const entry = d.journal.find((j) => j.id === id);
+    if (!entry) throw new Error("journal entry not found");
+    if (path.endsWith("/close")) {
+      const basis = entry.filled_avg_price || entry.limit_price || 0;
+      entry.exit_price = body.exit_price;
+      entry.realized_pnl = +((body.exit_price - basis) * 100 * entry.qty).toFixed(2);
+      entry.closed_at = "2026-06-10T12:00:00";
+      return { ok: true, realized_pnl: entry.realized_pnl, basis_used: basis };
+    }
+    if (path.endsWith("/sync")) {
+      return { ok: true, order: { id: entry.order_id, status: entry.status,
+               filled_avg_price: entry.filled_avg_price } };
+    }
+    entry.notes = body.notes || "";
+    return { ok: true };
+  }
+  if (path.startsWith("/journal")) return { items: d.journal };
+  if (path.startsWith("/alerts/mark-seen")) {
+    d.alerts.forEach((a) => { a.seen = 1; });
+    return { ok: true };
+  }
+  if (path.startsWith("/alerts")) return { items: d.alerts };
+  if (path.startsWith("/tracking/snapshot")) return { snapshot_date: "2026-06-14", candidates: 25, new_entries: 25 };
+  if (path.startsWith("/tracking/update")) return { updated: 18, expired: 2, errors: 0, remaining_open: 0 };
+  if (path.startsWith("/tracking/report")) {
+    return {
+      total_tracked: 60, with_outcome: 42, open: 18, quote_source: "tradier",
+      buckets: [
+        { range: "0-50", count: 0, avg_option_return: null, avg_underlying_return: null, win_rate: null, avg_days_held: null },
+        { range: "50-60", count: 6, avg_option_return: -3.1, avg_underlying_return: -0.4, win_rate: 0.333, avg_days_held: 5.2 },
+        { range: "60-70", count: 11, avg_option_return: 1.8, avg_underlying_return: 0.6, win_rate: 0.545, avg_days_held: 4.8 },
+        { range: "70-80", count: 14, avg_option_return: 6.4, avg_underlying_return: 1.5, win_rate: 0.643, avg_days_held: 5.1 },
+        { range: "80-90", count: 9, avg_option_return: 9.7, avg_underlying_return: 2.2, win_rate: 0.667, avg_days_held: 4.6 },
+        { range: "90-100+", count: 2, avg_option_return: 12.5, avg_underlying_return: 2.9, win_rate: 0.5, avg_days_held: 6.0 },
+      ],
+    };
+  }
+  if (path.startsWith("/tracking")) {
+    return { items: [
+      { snapshot_date: "2026-06-12", occ_symbol: "NVDA260717C00170000", underlying: "NVDA", score: 87.3, entry_mid: 13.10, current_mid: 14.25, option_return_pct: 8.8, underlying_return_pct: 2.1, days_held: 2, status: "open" },
+      { snapshot_date: "2026-06-12", occ_symbol: "MSFT260717C00480000", underlying: "MSFT", score: 81.0, entry_mid: 27.5, current_mid: 28.4, option_return_pct: 3.3, underlying_return_pct: 0.8, days_held: 2, status: "open" },
+      { snapshot_date: "2026-06-10", occ_symbol: "AMD260619C00150000", underlying: "AMD", score: 64.2, entry_mid: 10.2, current_mid: 9.6, option_return_pct: -5.9, underlying_return_pct: -1.2, days_held: 4, status: "open" },
+    ]};
+  }
+  throw new Error("demo mode: unknown endpoint " + path);
+}
+
+/* ------------------------------- banner -------------------------------- */
+
+const bannerState = {
+  demo: DEMO ? "DEMO MODE - sample data, orders disabled. Clone the repo and run it locally with your own keys for live use." : null,
+  setup: null, stale: null, degraded: null,
+};
+
+function renderBanner() {
+  const banner = $("#banner");
+  const warn = [bannerState.stale, bannerState.degraded].filter(Boolean);
+  const parts = [];
+  if (bannerState.demo) parts.push(bannerState.demo);
+  if (bannerState.setup) parts.push(bannerState.setup);
+  if (warn.length) parts.push("WARNING: " + warn.join(" | "));
+  if (!parts.length) {
+    banner.className = "hidden";
+    banner.textContent = "";
+    return;
+  }
+  // demo/setup guidance takes the calmer style; pure outage is loud
+  banner.className = (bannerState.demo || bannerState.setup) ? "info" : "warn";
+  banner.textContent = parts.join("  ||  ");
+}
+function setBanner(key, message) {
+  bannerState[key] = message || null;
+  renderBanner();
+}
+
+/* -------------------------------- tabs --------------------------------- */
+
+function showTab(name) {
+  document.querySelectorAll("nav#tabs button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  ["regime", "recs", "watchlist", "positions", "journal", "validation", "settings"].forEach((t) =>
+    $("#tab-" + t).classList.toggle("hidden", t !== name));
+  if (name === "positions") loadPositions();
+  if (name === "watchlist") loadWatchlist();
+  if (name === "journal") loadJournal();
+  if (name === "validation") loadValidation();
+  if (name === "settings") loadSettings();
+}
+
+/* ------------------------------- health -------------------------------- */
+
+async function loadHealth() {
+  try {
+    const h = await api("/health");
+    const badge = $("#mode-badge");
+    const broker = (h.broker || "alpaca").toUpperCase();
+    if (h.mode === "LIVE") {
+      badge.textContent = broker + (h.live_trading_enabled ? " LIVE" : " LIVE (orders blocked)");
+      badge.className = "badge live";
+    } else {
+      badge.textContent = broker + " PAPER";
+      badge.className = "badge paper";
+    }
+    $("#version").textContent = h.version ? " v" + h.version : "";
+    const loop = h.scan_loop || {};
+    $("#alerts-loop-status").textContent =
+      `Scan loop: ${loop.enabled ? "every " + loop.interval_minutes + "m" : "disabled"}, ` +
+      `threshold ${loop.threshold}, runs ${loop.runs}` +
+      (loop.last_skip ? ` | last skip: ${loop.last_skip}` : "") +
+      (loop.last_error ? ` | last error: ${loop.last_error}` : "");
+    const missing = [];
+    if (!h.providers.fmp.configured) missing.push("FMP_API_KEY");
+    if (!h.providers.alpaca.configured) missing.push("ALPACA_API_KEY / ALPACA_SECRET_KEY");
+    setBanner("setup", missing.length
+      ? "Setup: add " + missing.join(" and ") + " to .env, then restart. Market data is unavailable until then."
+      : null);
+  } catch (e) {
+    setBanner("stale", "API unreachable: " + e.message);
+  }
+}
+
+/* ------------------------------- regime -------------------------------- */
+
+function regimeChipClass(label) {
+  return label === "risk-on" ? "risk-on" : label === "risk-off" ? "risk-off" : "neutral";
+}
+
+async function loadRegime() {
+  try {
+    const r = await api("/regime");
+    const chip = $("#regime-chip");
+    chip.textContent = `regime: ${r.label} ${r.score}`;
+    chip.className = "chip " + regimeChipClass(r.label);
+
+    const colors = { "risk-on": "var(--green)", "risk-off": "var(--red)", "neutral": "var(--yellow)" };
+    $("#regime-main").innerHTML = `
+      <h3>Market Regime</h3>
+      <div class="regime-score">${num(r.score, 1)}</div>
+      <div class="regime-label" style="color:${colors[r.label] || "var(--text)"}">${esc(r.label)}</div>
+      <div class="mut" style="margin-top:8px; font-size:12.5px;">as of ${esc(r.as_of)}</div>
+      ${r.degraded ? '<div class="note" style="margin-top:8px;">Some components are degraded - see notes.</div>' : ""}
+      ${r.stale ? '<div class="note">Served from stale cache.</div>' : ""}
+    `;
+
+    $("#regime-components").innerHTML = Object.entries(r.components).map(([name, c]) => {
+      const detail = Object.entries(c.detail || {})
+        .map(([k, v]) => `${esc(k)}: ${esc(typeof v === "number" ? num(v, 2) : v)}`).join(" | ");
+      return `
+        <div class="component">
+          <div class="head">
+            <span>${esc(name)} <span class="mut">(w ${num(c.weight, 2)})</span></span>
+            <span class="mono">${num(c.score, 3)}</span>
+          </div>
+          <span class="bar-track"><span class="bar-fill" style="width:${Math.round(c.score * 100)}%"></span></span>
+          <div class="detail">${detail}</div>
+          ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
+        </div>`;
+    }).join("");
+
+    const hist = await api("/regime/history?limit=30");
+    $("#regime-history").innerHTML = hist.length ? `
+      <table><thead><tr><th>Date</th><th>Score</th><th>Label</th><th>Computed</th></tr></thead>
+      <tbody>${hist.map((row) => `
+        <tr><td>${esc(row.date)}</td><td>${num(row.score, 1)}</td>
+        <td><span class="chip ${regimeChipClass(row.label)}">${esc(row.label)}</span></td>
+        <td class="mut">${esc(row.created_at)}</td></tr>`).join("")}
+      </tbody></table>` : '<div class="empty">No snapshots yet</div>';
+
+    setBanner("stale", r.stale ? "Regime served from stale cache (provider outage)" : null);
+  } catch (e) {
+    $("#regime-main").innerHTML = `<div class="note">Regime unavailable: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------------------------- recommendations -------------------------- */
+
+let recsData = null;
+let recsFilter = { sectors: [], themes: [], dte: "", priceMin: "", priceMax: "" };
+let segmentsLoaded = false;
+let recsSort = { key: "score", dir: -1 };
+let recsView = "grouped";    // "grouped" (by ticker) or "flat" (all contracts)
+let flatLimit = 10;          // flat view row cap (0 = all)
+let expandedTicker = null;   // which ticker's option ladder is open
+let expandedOcc = null;      // which contract's score breakdown is open
+
+const REC_COLUMNS = [
+  ["underlying", "Ticker"], ["occ_symbol", "Contract"], ["expiration", "Exp"],
+  ["dte", "DTE"], ["strike", "Strike"], ["delta", "Delta"], ["mid", "Mid"],
+  ["spread_pct", "Spr%"], ["open_interest", "OI"], ["volume", "Vol"],
+  ["iv", "IV"], ["iv_rank", "IVR"], ["score", "Score"],
+];
+// text columns sort A->Z first; numeric columns sort high->low first
+const TEXT_COLS = new Set(["underlying", "occ_symbol", "expiration"]);
+
+async function loadSegments() {
+  if (segmentsLoaded) return;
+  try {
+    const s = await api("/segments");
+    const secList = $("#sector-ms-list");
+    secList.innerHTML = "";
+    (s.sectors || []).forEach((x) => {
+      const lbl = document.createElement("label");
+      lbl.className = "theme-ms-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = x.name;
+      cb.addEventListener("change", onSectorMsChange);
+      lbl.appendChild(cb);
+      const txt = document.createElement("span");
+      txt.textContent = `${x.name} `;
+      const cnt = document.createElement("span");
+      cnt.className = "mut"; cnt.textContent = `(${x.count})`;
+      txt.appendChild(cnt);
+      lbl.appendChild(txt);
+      secList.appendChild(lbl);
+    });
+    const msList = $("#theme-ms-list");
+    msList.innerHTML = "";
+    (s.themes || []).forEach((x) => {
+      const lbl = document.createElement("label");
+      lbl.className = "theme-ms-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = x.name;
+      cb.addEventListener("change", onThemeMsChange);
+      lbl.appendChild(cb);
+      const txt = document.createElement("span");
+      txt.textContent = `${x.name} `;
+      const cnt = document.createElement("span");
+      cnt.className = "mut"; cnt.textContent = `(${x.count})`;
+      txt.appendChild(cnt);
+      lbl.appendChild(txt);
+      msList.appendChild(lbl);
+    });
+    const dteSel = $("#filter-dte");
+    (s.dte_presets || []).forEach((x) => {
+      const o = document.createElement("option");
+      o.value = x.key; o.textContent = `DTE: ${x.label}`;
+      dteSel.appendChild(o);
+    });
+    segmentsLoaded = true;
+  } catch (e) { /* segments optional; filters just stay at "All" */ }
+}
+
+/* ---- sector multi-select ---- */
+function getSectorMsSelected() {
+  return [...($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])]
+    .map((cb) => cb.value);
+}
+function updateSectorMsBtn() {
+  const sel = getSectorMsSelected();
+  const btn = $("#sector-ms-btn");
+  if (!btn) return;
+  if (!sel.length) { btn.textContent = "All sectors"; btn.classList.remove("active"); }
+  else if (sel.length === 1) { btn.textContent = sel[0]; btn.classList.add("active"); }
+  else { btn.textContent = `${sel.length} sectors`; btn.classList.add("active"); }
+  const cnt = $("#sector-ms-count");
+  if (cnt) cnt.textContent = sel.length ? `${sel.length} selected` : "";
+}
+function onSectorMsChange() {
+  updateSectorMsBtn();
+  onFilterChange();
+}
+function toggleSectorMs(e) {
+  e.stopPropagation();
+  const panel = $("#sector-ms-panel");
+  if (!panel) return;
+  panel.classList.toggle("hidden");
+}
+function clearSectorMs() {
+  ($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateSectorMsBtn();
+  onFilterChange();
+}
+
+/* ---- theme multi-select ---- */
+function getThemeMsSelected() {
+  return [...($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])]
+    .map((cb) => cb.value);
+}
+function updateThemeMsBtn() {
+  const sel = getThemeMsSelected();
+  const btn = $("#theme-ms-btn");
+  if (!btn) return;
+  if (!sel.length) { btn.textContent = "All themes"; btn.classList.remove("active"); }
+  else if (sel.length === 1) { btn.textContent = sel[0]; btn.classList.add("active"); }
+  else { btn.textContent = `${sel.length} themes`; btn.classList.add("active"); }
+  const cnt = $("#theme-ms-count");
+  if (cnt) cnt.textContent = sel.length ? `${sel.length} selected` : "";
+}
+function onThemeMsChange() {
+  updateThemeMsBtn();
+  onFilterChange();
+}
+function toggleThemeMs(e) {
+  e.stopPropagation();
+  const panel = $("#theme-ms-panel");
+  if (!panel) return;
+  const isOpen = !panel.classList.contains("hidden");
+  if (isOpen) { panel.classList.add("hidden"); return; }
+  panel.classList.remove("hidden");
+  const s = $("#theme-ms-search");
+  if (s) { s.value = ""; filterThemeMs(); s.focus(); }
+}
+function filterThemeMs() {
+  const q = ($("#theme-ms-search")?.value || "").toLowerCase();
+  ($("#theme-ms-list")?.querySelectorAll(".theme-ms-item") || []).forEach((el) => {
+    el.classList.toggle("hidden", q.length > 0 && !el.textContent.toLowerCase().includes(q));
+  });
+}
+function clearThemeMs() {
+  ($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateThemeMsBtn();
+  onFilterChange();
+}
+// close the panels on outside click
+document.addEventListener("click", (e) => {
+  [["#theme-ms-wrap", "#theme-ms-panel"], ["#sector-ms-wrap", "#sector-ms-panel"]]
+    .forEach(([wrapSel, panelSel]) => {
+      const wrap = $(wrapSel);
+      if (wrap && !wrap.contains(e.target)) {
+        const panel = $(panelSel);
+        if (panel) panel.classList.add("hidden");
+      }
+    });
+});
+
+function onFilterChange() {
+  recsFilter = { sectors: getSectorMsSelected(), themes: getThemeMsSelected(),
+                 dte: $("#filter-dte").value,
+                 priceMin: $("#filter-price-min").value.trim(),
+                 priceMax: $("#filter-price-max").value.trim() };
+  const hasFilter = recsFilter.sectors.length || recsFilter.themes.length ||
+                    recsFilter.dte || recsFilter.priceMin || recsFilter.priceMax;
+  $("#filter-clear").style.display = hasFilter ? "" : "none";
+  expandedTicker = null; expandedOcc = null;
+  loadRecs(true);
+}
+
+function clearFilters() {
+  ($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateSectorMsBtn();
+  ($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateThemeMsBtn();
+  $("#filter-dte").value = "";
+  $("#filter-price-min").value = "";
+  $("#filter-price-max").value = "";
+  onFilterChange();
+}
+
+function setView(view) {
+  recsView = view;
+  $("#view-grouped").classList.toggle("active", view === "grouped");
+  $("#view-flat").classList.toggle("active", view === "flat");
+  $("#flat-limit").style.display = view === "flat" ? "" : "none";
+  expandedTicker = null; expandedOcc = null;
+  renderRecs();   // re-render from cached data, no re-scan needed
+}
+
+function setFlatLimit() {
+  flatLimit = parseInt($("#flat-limit").value, 10);
+  renderRecs();
+}
+
+// Copy works over https/localhost via the Clipboard API, and falls back to a
+// hidden textarea + execCommand for plain-http (LAN) where the API is blocked.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);   // https / localhost (e.g. ngrok)
+      return true;
+    }
+  } catch (e) { /* fall through to legacy path (plain-http LAN) */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.contentEditable = "true";
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    if (/ipad|iphone|ipod/i.test(navigator.userAgent)) {
+      // iOS Safari needs an explicit selection range, not just .select()
+      const range = document.createRange();
+      range.selectNodeContents(ta);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ta.setSelectionRange(0, text.length);
+    } else {
+      ta.focus();
+      ta.select();
+    }
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
+async function copyTickers() {
+  if (!recsData) return;
+  // unique tickers from the current scan (respects the active sector/theme/DTE
+  // filter), ranked best-first - the grouped set is already deduped by ticker
+  const tickers = [...new Set(recGroups(recsData).map((g) => g.underlying))].filter(Boolean);
+  if (!tickers.length) { toast("No tickers to copy", true); return; }
+  const list = tickers.join(",");
+  const ok = await copyText(list);
+  if (ok) toast(`Copied ${tickers.length} tickers - paste into TradingView`);
+  else window.prompt("Copy these tickers for TradingView:", list);
+}
+
+async function loadRecs(refresh = false) {
+  const btn = $("#scan-btn");
+  btn.disabled = true;
+  btn.textContent = refresh ? "Scanning..." : "Loading...";
+  try {
+    const params = new URLSearchParams();
+    if (refresh) params.set("refresh", "true");
+    (recsFilter.sectors || []).forEach((s) => params.append("sector", s));
+    (recsFilter.themes || []).forEach((t) => params.append("theme", t));
+    if (recsFilter.dte) params.set("dte", recsFilter.dte);
+    if (recsFilter.priceMin !== "") params.set("price_min", recsFilter.priceMin);
+    if (recsFilter.priceMax !== "") params.set("price_max", recsFilter.priceMax);
+    const qs = params.toString();
+    recsData = await api("/recommendations" + (qs ? "?" + qs : ""));
+    renderRecs();
+  } catch (e) {
+    $("#recs-table").innerHTML = `<div class="note">Scan failed: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh Scan";
+  }
+}
+
+function sortRecs(key) {
+  if (recsSort.key === key) {
+    recsSort = { key, dir: -recsSort.dir };          // same column: flip direction
+  } else {
+    recsSort = { key, dir: TEXT_COLS.has(key) ? 1 : -1 };  // new column: natural default
+  }
+  renderRecs();
+}
+
+function sortableHead(extraLeading) {
+  return (extraLeading || "") + REC_COLUMNS.map(([key, label]) => {
+    const active = recsSort.key === key;
+    const caret = active ? `<span class="caret ${recsSort.dir === 1 ? "up" : "down"}"></span>` : "";
+    return `<th class="sortable${active ? " active" : ""}" onclick="sortRecs('${key}')"
+            title="Sort by ${label}">${label}${caret}</th>`;
+  }).join("") + "<th></th>";
+}
+
+function contractCmp(a, b) {
+  const av = a[recsSort.key], bv = b[recsSort.key];
+  if (av === null || av === undefined) return 1;
+  if (bv === null || bv === undefined) return -1;
+  return (av < bv ? -1 : av > bv ? 1 : 0) * recsSort.dir;
+}
+
+function renderRecs() {
+  const d = recsData;
+  if (!d) return;
+  const pf = d.prefilter || {};
+  const scanPhrase = pf.prefiltered
+    ? `${d.universe_size} tickers prefiltered to top ${d.tickers_scanned}`
+    : `${d.universe_size} tickers`;
+
+  const dropped = Object.entries(d.dropped || {}).map(([k, v]) => `${v} dropped: ${k}`).join(" | ");
+  const degraded = (d.degraded || []).map((x) => `${x.symbol}: ${x.error}`).join(" | ");
+  $("#recs-degraded").textContent = [dropped, degraded].filter(Boolean).join("  ||  ");
+  setBanner("degraded", (d.degraded || []).length
+    ? `${d.degraded.length}/${d.universe_size} tickers failed to scan` : null);
+
+  const groups = recGroups(d);
+  const seg = d.segment || {};
+  const dtePhrase = seg.dte_band ? `DTE ${seg.dte_band.min}-${seg.dte_band.max}d` : "";
+  const sectorPhrase = seg.sectors && seg.sectors.length > 1
+    ? `${seg.sectors.length} sectors`
+    : (seg.sector || (seg.sectors && seg.sectors[0]) || "");
+  const themePhrase = seg.themes && seg.themes.length > 1
+    ? `${seg.themes.length} themes`
+    : (seg.theme || (seg.themes && seg.themes[0]) || "");
+  const pmin = seg.price_min, pmax = seg.price_max;
+  const pricePhrase = (pmin != null || pmax != null)
+    ? `$${pmin != null ? pmin : "0"}-${pmax != null ? pmax : "∞"}`
+    : "";
+  const weightPhrase = (seg.weight_profile && seg.weight_profile !== "default")
+    ? "DTE-tuned weights" : "";
+  const segPhrase = [sectorPhrase, themePhrase, dtePhrase, pricePhrase, weightPhrase]
+    .filter(Boolean).join(" + ");
+  const tail = recsView === "flat"
+    ? `${(d.results || []).length} contracts ranked`
+    : `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, top ${groups.length} tickers shown`;
+  $("#recs-info").textContent =
+    `as of ${d.as_of} | regime ${d.regime.label} ${d.regime.score} | ` +
+    (segPhrase ? `[${segPhrase}] ` : "") +
+    `${scanPhrase}, ${d.contracts_scanned} scanned, ${tail}` + (d.stale ? " | STALE" : "");
+
+  if (!(d.results || []).length) {
+    const where = segPhrase ? ` in ${segPhrase}` : "";
+    $("#recs-table").innerHTML =
+      `<div class="empty">No contracts passed filters${where}. Try a different sector/theme/DTE, check market hours, or loosen config/scoring.json filters.</div>`;
+    return;
+  }
+  if (recsView === "flat") return renderFlat(d);
+  renderGrouped(d, groups);
+}
+
+// One row per ticker (its best contract); expand to the ticker's ladder.
+function renderGrouped(d, groups) {
+  const sorted = [...groups].sort((a, b) => {
+    const av = groupSortVal(a, recsSort.key), bv = groupSortVal(b, recsSort.key);
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    return (av < bv ? -1 : av > bv ? 1 : 0) * recsSort.dir;
+  });
+  const body = sorted.map((g) => {
+    const r = g.best;
+    const open = expandedTicker === g.underlying;
+    const more = g.count > 1 ? `<span class="more">+${g.count - 1} more</span>` : "";
+    const main = `
+      <tr class="clickable${open ? " open" : ""}" onclick="toggleTicker('${esc(g.underlying)}')"
+          title="${g.count} contract${g.count === 1 ? "" : "s"} - click to ${open ? "collapse" : "see all ranked"}">
+        <td><span class="twist${open ? " open" : ""}"></span><strong>${esc(g.underlying)}</strong>${more}
+          ${g.sector ? `<div class="ticker-sector">${esc(g.sector)}</div>` : ""}</td>
+        <td class="mono">${esc(r.occ_symbol)}</td>
+        <td>${esc(r.expiration)}</td><td>${r.dte}</td><td>${num(r.strike, 1)}</td>
+        <td>${num(r.delta, 2)}</td><td>${money(r.mid)}</td><td>${pct01(r.spread_pct)}</td>
+        <td>${r.open_interest}</td><td>${r.volume}</td>
+        <td>${r.iv == null ? "-" : num(r.iv, 2)}</td><td>${r.iv_rank == null ? "-" : num(r.iv_rank, 2)}</td>
+        <td>${scorePill(r.score)}</td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(r.occ_symbol)}')">Review</button></td>
+      </tr>`;
+    const expansion = open ? `<tr class="ladder"><td colspan="14">${ladderTable(g)}</td></tr>` : "";
+    return main + expansion;
+  }).join("");
+  $("#recs-table").innerHTML =
+    `<table><thead><tr>${sortableHead()}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Flat contract list, duplicate tickers allowed, fully sortable, top-N capped.
+function renderFlat(d) {
+  const all = [...d.results].sort(contractCmp);
+  const limit = flatLimit > 0 ? Math.min(flatLimit, all.length) : all.length;
+  const rows = all.slice(0, limit);
+  const head = `<th>#</th>` + sortableHead();
+  const body = rows.map((r, i) => {
+    const open = expandedOcc === r.occ_symbol;
+    const main = `
+      <tr class="clickable${open ? " open" : ""}" onclick="toggleBreakdown('${esc(r.occ_symbol)}')">
+        <td class="mut">${i + 1}</td>
+        <td><strong>${esc(r.underlying)}</strong></td>
+        <td class="mono">${esc(r.occ_symbol)}</td>
+        <td>${esc(r.expiration)}</td><td>${r.dte}</td><td>${num(r.strike, 1)}</td>
+        <td>${num(r.delta, 2)}</td><td>${money(r.mid)}</td><td>${pct01(r.spread_pct)}</td>
+        <td>${r.open_interest}</td><td>${r.volume}</td>
+        <td>${r.iv == null ? "-" : num(r.iv, 2)}</td><td>${r.iv_rank == null ? "-" : num(r.iv_rank, 2)}</td>
+        <td>${scorePill(r.score)}</td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(r.occ_symbol)}')">Review</button></td>
+      </tr>`;
+    const bd = open ? `<tr class="breakdown"><td colspan="15">${breakdownTable(r)}</td></tr>` : "";
+    return main + bd;
+  }).join("");
+  $("#recs-table").innerHTML =
+    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Normalize to groups: prefer server groups, else group flat results by ticker.
+function recGroups(d) {
+  if (d.groups && d.groups.length) return d.groups;
+  const map = {};
+  (d.results || []).forEach((r) => { (map[r.underlying] = map[r.underlying] || []).push(r); });
+  return Object.entries(map).map(([underlying, contracts]) => ({
+    underlying, best: contracts[0], best_score: contracts[0].score,
+    count: contracts.length, contracts,
+  }));
+}
+
+function groupSortVal(g, key) {
+  if (key === "underlying") return g.underlying;
+  if (key === "score") return g.best_score;
+  return g.best ? g.best[key] : null;   // other columns sort by the best contract
+}
+
+// A ticker's full option ladder, ranked; each row expands to its breakdown.
+function ladderTable(g) {
+  const shown = g.contracts.length;
+  const scope = shown < g.count ? `top ${shown} of ${g.count}` : `${g.count}`;
+  const header = `<div style="margin:2px 0 8px;"><strong>${esc(g.underlying)}</strong>
+    <span class="mut">${scope} contract${g.count === 1 ? "" : "s"} by score, best ${num(g.best_score, 1)}
+    - click any row for its score breakdown</span></div>`;
+  const cols = `<tr>
+    <th>Contract</th><th>Exp</th><th>DTE</th><th>Strike</th><th>Delta</th><th>Mid</th>
+    <th>Spr%</th><th>OI</th><th>Vol</th><th>IV</th><th>IVR</th><th>Score</th><th></th></tr>`;
+  const rows = g.contracts.map((c) => {
+    const open = expandedOcc === c.occ_symbol;
+    const r = `
+      <tr class="clickable" onclick="toggleBreakdown('${esc(c.occ_symbol)}')">
+        <td class="mono">${esc(c.occ_symbol)}</td>
+        <td>${esc(c.expiration)}</td>
+        <td>${c.dte}</td>
+        <td>${num(c.strike, 1)}</td>
+        <td>${num(c.delta, 2)}</td>
+        <td>${money(c.mid)}</td>
+        <td>${pct01(c.spread_pct)}</td>
+        <td>${c.open_interest}</td>
+        <td>${c.volume}</td>
+        <td>${c.iv === null || c.iv === undefined ? "-" : num(c.iv, 2)}</td>
+        <td>${c.iv_rank === null || c.iv_rank === undefined ? "-" : num(c.iv_rank, 2)}</td>
+        <td>${scorePill(c.score)}</td>
+        <td><button class="small primary" onclick="event.stopPropagation(); openOrderModal('${esc(c.occ_symbol)}')">Review</button></td>
+      </tr>`;
+    const bd = open ? `<tr class="breakdown"><td colspan="13">${breakdownTable(c)}</td></tr>` : "";
+    return r + bd;
+  }).join("");
+  return header + `<table><thead>${cols}</thead><tbody>${rows}</tbody></table>`;
+}
+
+function toggleTicker(ticker) {
+  expandedTicker = expandedTicker === ticker ? null : ticker;
+  renderRecs();
+}
+
+function breakdownTable(r) {
+  const comps = r.components || [];
+  return `
+    <div style="margin-bottom:6px;"><strong>${esc(r.occ_symbol)}</strong>
+      <span class="mut">spot ${money(r.spot)} | trend ${r.trend01 === null ? "n/a" : num(r.trend01, 2)} | total</span>
+      ${scorePill(r.score)}</div>
+    <table>
+      <thead><tr><th>Component</th><th>Raw</th><th>Score</th><th>Weight</th><th>Contribution</th><th style="text-align:left">Note</th></tr></thead>
+      <tbody>${comps.map((c) => `
+        <tr>
+          <td>${esc(c.name)}</td>
+          <td>${c.raw === null || c.raw === undefined ? "-" : (typeof c.raw === "number" ? num(c.raw, 4) : esc(c.raw))}</td>
+          <td><span class="bar-track" style="width:70px"><span class="bar-fill" style="width:${Math.round(c.score * 100)}%"></span></span>
+              <span class="mono"> ${num(c.score, 3)}</span></td>
+          <td>${num(c.weight, 3)}</td>
+          <td class="mono">${num(c.contribution, 4)}</td>
+          <td style="text-align:left" class="mut">${esc(c.note || "")}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function toggleBreakdown(occ) {
+  expandedOcc = expandedOcc === occ ? null : occ;
+  renderRecs();
+}
+
+/* ----------------------------- order modal ----------------------------- */
+
+let modalState = null;
+
+async function openOrderModal(occ) {
+  const root = $("#modal-root");
+  root.classList.remove("hidden");
+  root.innerHTML = `<div class="modal"><h2>Review Order</h2><div class="empty">Loading preview for ${esc(occ)}...</div></div>`;
+  try {
+    const p = await api("/orders/preview", { method: "POST", body: JSON.stringify({ occ_symbol: occ }) });
+    modalState = { preview: p, row: (recsData?.results || []).find((r) => r.occ_symbol === occ) || null };
+    renderOrderModal();
+  } catch (e) {
+    root.innerHTML = `
+      <div class="modal">
+        <h2>Review Order</h2>
+        <div class="note" style="margin:12px 0;">Preview failed: ${esc(e.message)}</div>
+        <button onclick="closeModal()">Close</button>
+      </div>`;
+  }
+}
+
+function renderOrderModal() {
+  const { preview: p, row } = modalState;
+  const live = p.mode === "LIVE";
+  const qty = Math.max(p.suggested_qty, 0);
+  $("#modal-root").innerHTML = `
+    <div class="modal">
+      <h2>Review Order <span class="badge ${live ? "live" : "paper"}">${esc((p.broker || "").toUpperCase())} ${live ? "LIVE" : "PAPER"}</span></h2>
+      <div class="sub mono">${esc(p.occ_symbol)} (${esc(p.underlying || "?")}) - buy to open, day limit</div>
+
+      <div class="kv">
+        <div><span>Bid / Ask</span><span class="mono">${money(p.bid)} / ${money(p.ask)}</span></div>
+        <div><span>Mid</span><span class="mono">${money(p.mid)}</span></div>
+        <div><span>Account equity</span><span class="mono">${money(p.equity)}${p.stale_account ? " (stale)" : ""}</span></div>
+        <div><span>Risk budget (${num(p.max_risk_pct_equity, 1)}% equity)</span><span class="mono">${money(p.max_risk_dollars)}</span></div>
+        <div><span>Suggested size</span><span class="mono">${p.suggested_qty} contract(s)</span></div>
+        <div><span>Score at scan</span><span>${p.score_snapshot ? scorePill(p.score_snapshot.score) : '<span class="mut">not in last scan</span>'}</span></div>
+      </div>
+
+      ${(p.warnings || []).map((w) => `<div class="note">WARNING: ${esc(w)}</div>`).join("")}
+
+      <div class="kv" style="margin-top:14px;">
+        <div style="border:none"><span>Quantity</span>
+          <input type="number" id="ord-qty" min="1" max="${p.max_contracts_per_order}" step="1"
+                 value="${Math.max(qty, 1)}" style="width:90px" oninput="recalcMaxLoss()"></div>
+        <div style="border:none"><span>Limit price</span>
+          <input type="number" id="ord-limit" min="0.01" step="0.01"
+                 value="${p.limit_price ?? ""}" style="width:110px" oninput="recalcMaxLoss()"></div>
+      </div>
+      <div class="kv">
+        <div><span>Estimated max loss (premium at risk)</span>
+             <span class="mono" id="ord-maxloss">-</span></div>
+      </div>
+
+      ${live ? `
+        <div class="live-warning">
+          <strong>REAL MONEY.</strong> This order goes to the live ${esc(p.broker || "broker")} account${p.broker === "public" ? " (Public has no paper environment)" : ""}.
+          ${p.live_blocked_by_env
+            ? "Blocked: set LIVE_TRADING_ENABLED=true in .env to allow live orders."
+            : 'Type <strong>LIVE</strong> to enable the confirm button.'}
+          ${p.live_blocked_by_env ? "" : '<div style="margin-top:8px;"><input type="text" id="live-ack" placeholder="type LIVE" oninput="recalcMaxLoss()" style="width:120px"></div>'}
+        </div>` : ""}
+
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="${live ? "danger" : "primary"}" id="confirm-btn" onclick="submitOrder()">
+          Confirm Order (${live ? "LIVE" : "paper"})
+        </button>
+      </div>
+      <div id="order-result"></div>
+    </div>`;
+  recalcMaxLoss();
+}
+
+function recalcMaxLoss() {
+  const p = modalState?.preview;
+  if (!p) return;
+  const qty = parseInt($("#ord-qty")?.value || "0", 10);
+  const limit = parseFloat($("#ord-limit")?.value || "0");
+  $("#ord-maxloss").textContent =
+    qty > 0 && limit > 0 ? money(qty * limit * 100) : "-";
+  const btn = $("#confirm-btn");
+  if (!btn) return;
+  let ok = qty >= 1 && qty <= p.max_contracts_per_order && limit > 0;
+  if (p.mode === "LIVE") {
+    if (p.live_blocked_by_env) ok = false;
+    else ok = ok && ($("#live-ack")?.value || "").trim() === "LIVE";
+  }
+  btn.disabled = !ok;
+}
+
+async function submitOrder() {
+  const p = modalState?.preview;
+  if (!p) return;
+  const qty = parseInt($("#ord-qty").value, 10);
+  const limit = parseFloat($("#ord-limit").value);
+  const body = {
+    occ_symbol: p.occ_symbol,
+    qty: qty,
+    limit_price: limit,
+    confirmed: true,
+    live_ack: $("#live-ack") ? $("#live-ack").value.trim() : null,
+  };
+  const btn = $("#confirm-btn");
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+  const resultDiv = $("#order-result");
+  try {
+    const res = await api("/orders", { method: "POST", body: JSON.stringify(body) });
+    const o = res.order;
+    resultDiv.innerHTML = `
+      <div class="order-result">
+        Submitted. Order <span class="mono">${esc(o.id || "?")}</span>
+        - status <strong id="live-status">${esc(o.status || "?")}</strong><br>
+        <span class="mut">Journaled as entry #${res.journal_id}. Status updates below.</span>
+      </div>`;
+    toast(`Order submitted: ${p.occ_symbol} x${qty} @ ${money(limit)}`);
+    pollOrderStatus(o.id, 5);
+    loadJournal();
+  } catch (e) {
+    resultDiv.innerHTML = `<div class="order-result note">Rejected: ${esc(e.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = "Confirm Order (" + (p.mode === "LIVE" ? "LIVE" : "paper") + ")";
+  }
+}
+
+async function pollOrderStatus(orderId, remaining) {
+  if (!orderId || remaining <= 0) return;
+  setTimeout(async () => {
+    try {
+      const res = await api("/orders/" + orderId);
+      const el = $("#live-status");
+      if (el) {
+        el.textContent = res.order.status +
+          (res.order.filled_avg_price ? ` @ ${money(parseFloat(res.order.filled_avg_price))}` : "");
+      }
+      if (["filled", "canceled", "rejected", "expired"].includes(res.order.status)) return;
+    } catch (e) { /* transient - keep polling */ }
+    pollOrderStatus(orderId, remaining - 1);
+  }, 2000);
+}
+
+function closeModal() {
+  $("#modal-root").classList.add("hidden");
+  $("#modal-root").innerHTML = "";
+  modalState = null;
+}
+
+/* ------------------------------ watchlist ------------------------------ */
+
+async function loadWatchlist() {
+  try {
+    const w = await api("/watchlist");
+    if (!w.items.length) {
+      $("#watchlist-table").innerHTML = '<div class="empty">Watchlist is empty - add a ticker above.</div>';
+      return;
+    }
+    $("#watchlist-table").innerHTML = `
+      <table>
+        <thead><tr><th>Symbol</th><th>Price</th><th>Day</th><th>vs 50dma</th><th>vs 200dma</th><th>Added</th><th></th></tr></thead>
+        <tbody>${w.items.map((it) => `
+          <tr>
+            <td><strong>${esc(it.symbol)}</strong></td>
+            <td>${money(it.price)}</td>
+            <td>${signed(it.change_pct, 2, "%")}</td>
+            <td>${it.above_ma50 === null ? "-" : it.above_ma50 ? '<span class="pos">above</span>' : '<span class="neg">below</span>'}</td>
+            <td>${it.above_ma200 === null ? "-" : it.above_ma200 ? '<span class="pos">above</span>' : '<span class="neg">below</span>'}</td>
+            <td class="mut">${esc((it.added_at || "").slice(0, 10))}</td>
+            <td><button class="small" onclick="removeWatch('${esc(it.symbol)}')">Remove</button></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      ${w.error ? `<div class="note" style="margin-top:6px;">Quotes unavailable: ${esc(w.error)}</div>` : ""}
+      ${w.stale ? '<div class="note">Quotes served from stale cache.</div>' : ""}`;
+  } catch (e) {
+    $("#watchlist-table").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function addWatch() {
+  const input = $("#watch-input");
+  const symbol = input.value.trim().toUpperCase();
+  if (!symbol) return;
+  try {
+    await api("/watchlist/" + encodeURIComponent(symbol), { method: "POST" });
+    input.value = "";
+    loadWatchlist();
+  } catch (e) { toast("Add failed: " + e.message, true); }
+}
+
+async function removeWatch(symbol) {
+  try {
+    await api("/watchlist/" + encodeURIComponent(symbol), { method: "DELETE" });
+    loadWatchlist();
+  } catch (e) { toast("Remove failed: " + e.message, true); }
+}
+
+/* ------------------------------ positions ------------------------------ */
+
+async function loadPositions() {
+  try {
+    const p = await api("/positions");
+    $("#positions-info").textContent = `as of ${p.as_of}` + (p.stale ? " | STALE" : "");
+    if (!p.positions.length) {
+      $("#positions-table").innerHTML = '<div class="empty">No open positions.</div>';
+      return;
+    }
+    const totalValue = p.positions.reduce((s, x) => s + x.market_value, 0);
+    const totalPL = p.positions.reduce((s, x) => s + x.unrealized_pl, 0);
+    $("#positions-table").innerHTML = `
+      <table>
+        <thead><tr><th>Symbol</th><th>Class</th><th>Qty</th><th>Avg Entry</th><th>Current</th>
+        <th>Mkt Value</th><th>Unrealized P&amp;L</th><th>%</th></tr></thead>
+        <tbody>
+          ${p.positions.map((x) => `
+            <tr>
+              <td class="mono"><strong>${esc(x.symbol)}</strong></td>
+              <td class="mut">${esc(x.asset_class || "")}</td>
+              <td>${x.qty}</td>
+              <td>${money(x.avg_entry_price)}</td>
+              <td>${money(x.current_price)}</td>
+              <td>${money(x.market_value)}</td>
+              <td>${signedMoney(x.unrealized_pl)}</td>
+              <td>${signed(x.unrealized_plpc, 2, "%")}</td>
+            </tr>`).join("")}
+          <tr style="font-weight:700;">
+            <td>TOTAL</td><td></td><td></td><td></td><td></td>
+            <td>${money(totalValue)}</td><td>${signedMoney(totalPL)}</td><td></td>
+          </tr>
+        </tbody>
+      </table>`;
+    if (p.stale) setBanner("stale", "Positions served from stale cache (provider outage)");
+  } catch (e) {
+    $("#positions-table").innerHTML = `<div class="note">Positions unavailable: ${esc(e.message)}</div>`;
+  }
+}
+
+/* ------------------------------- journal ------------------------------- */
+
+async function loadJournal() {
+  try {
+    const stats = await api("/journal/stats");
+    const cards = [
+      ["Open", stats.open],
+      ["Closed", stats.closed],
+      ["Win rate", stats.win_rate === null ? "-" : pct01(stats.win_rate)],
+      ["Profit factor", stats.profit_factor === null ? "-" : stats.profit_factor],
+      ["Net P&L", money(stats.net_pnl)],
+      ["Avg hold (days)", stats.avg_hold_days ?? "-"],
+    ];
+    $("#journal-stats").innerHTML = cards.map(([label, value]) => `
+      <div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+
+    const j = await api("/journal");
+    if (!j.items.length) {
+      $("#journal-table").innerHTML =
+        '<div class="empty">No journal entries yet. Orders are logged automatically when submitted.</div>';
+      return;
+    }
+    $("#journal-table").innerHTML = `
+      <table>
+        <thead><tr><th>#</th><th>Opened</th><th>Contract</th><th>Qty</th><th>Limit</th><th>Fill</th>
+        <th>Status</th><th>Regime@entry</th><th>Score@entry</th><th style="text-align:left">Notes</th>
+        <th>Exit</th><th>Realized P&amp;L</th><th></th></tr></thead>
+        <tbody>${j.items.map((it) => `
+          <tr>
+            <td>${it.id}</td>
+            <td class="mut">${esc((it.created_at || "").replace("T", " ").slice(0, 16))}</td>
+            <td class="mono">${esc(it.occ_symbol)}${it.paper ? "" : ` <span class="badge live">${esc((it.broker || "").toUpperCase())} LIVE</span>`}</td>
+            <td>${it.qty}</td>
+            <td>${money(it.limit_price)}</td>
+            <td>${it.filled_avg_price ? money(it.filled_avg_price) : "-"}</td>
+            <td>${esc(it.status || "-")}</td>
+            <td>${it.regime_label ? `<span class="chip ${regimeChipClass(it.regime_label)}">${esc(it.regime_label)} ${num(it.regime_score, 0)}</span>` : "-"}</td>
+            <td>${it.score_total !== null && it.score_total !== undefined ? scorePill(it.score_total) : "-"}</td>
+            <td style="text-align:left">
+              <textarea class="notes" onblur="saveNotes(${it.id}, this.value)">${esc(it.notes || "")}</textarea>
+            </td>
+            <td>${it.exit_price ? money(it.exit_price) : "-"}</td>
+            <td>${it.realized_pnl === null || it.realized_pnl === undefined ? "-" : signedMoney(it.realized_pnl)}</td>
+            <td style="white-space:nowrap">
+              ${it.order_id && !it.closed_at ? `<button class="small" onclick="syncJournal(${it.id})">Sync</button>` : ""}
+              ${!it.closed_at ? `<button class="small" onclick="closeJournal(${it.id})">Close</button>` : ""}
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    $("#journal-table").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function saveNotes(id, notes) {
+  try {
+    await api("/journal/" + id, { method: "PATCH", body: JSON.stringify({ notes }) });
+  } catch (e) { toast("Notes save failed: " + e.message, true); }
+}
+
+async function syncJournal(id) {
+  try {
+    const res = await api("/journal/" + id + "/sync", { method: "POST" });
+    toast(`Order ${res.order.status}` +
+      (res.order.filled_avg_price ? ` @ ${money(parseFloat(res.order.filled_avg_price))}` : ""));
+    loadJournal();
+  } catch (e) { toast("Sync failed: " + e.message, true); }
+}
+
+async function closeJournal(id) {
+  const raw = prompt("Exit price per contract (option premium, e.g. 6.40):");
+  if (raw === null) return;
+  const exitPrice = parseFloat(raw);
+  if (isNaN(exitPrice) || exitPrice < 0) { toast("Invalid exit price", true); return; }
+  try {
+    const res = await api("/journal/" + id + "/close", {
+      method: "POST", body: JSON.stringify({ exit_price: exitPrice }),
+    });
+    toast("Closed. Realized P&L: " + money(res.realized_pnl));
+    loadJournal();
+  } catch (e) { toast("Close failed: " + e.message, true); }
+}
+
+/* ------------------------------- settings ------------------------------ */
+
+const SECRET_FIELDS = [
+  ["FMP_API_KEY", "FMP API key", "fundamentals, quotes, VIX, sectors"],
+  ["ALPACA_API_KEY", "Alpaca key id", "options chains + trading"],
+  ["ALPACA_SECRET_KEY", "Alpaca secret", "options chains + trading"],
+  ["TRADIER_ACCESS_TOKEN", "Tradier access token", "options chains + trading"],
+  ["PUBLIC_API_SECRET", "Public.com API secret", "trading (real money only)"],
+];
+
+async function loadSettings() {
+  const body = $("#settings-body");
+  if (DEMO) {
+    body.innerHTML = `<div class="panel"><h3>Settings</h3>
+      <div class="empty">Settings are disabled in the demo. Clone the repo and run it
+      locally to enter your own keys and choose a broker.</div></div>`;
+    return;
+  }
+  let s;
+  try { s = await api("/settings"); }
+  catch (e) { body.innerHTML = `<div class="panel"><div class="note">${esc(e.message)}</div></div>`; return; }
+
+  const realMoney = s.real_money || {};
+  const brokerOpts = (current) => s.brokers.map((b) =>
+    `<option value="${b}" ${b === current ? "selected" : ""}>${b}${realMoney[b] ? " (real money)" : b === "alpaca" ? " (paper)" : ""}</option>`).join("");
+
+  const keyRows = SECRET_FIELDS.map(([key, label, use]) => {
+    const set = s.keys[key] && s.keys[key].set;
+    return `
+      <div class="set-row">
+        <div class="set-label">${label}<div class="set-use">${use}</div></div>
+        <input type="password" id="set-${key}" placeholder="${set ? "•••••••• (set - leave blank to keep)" : "not set"}" autocomplete="off">
+        <span class="set-status ${set ? "ok" : "off"}">${set ? "set" : "missing"}</span>
+      </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    <div class="panel">
+      <h3>Provider keys</h3>
+      <div class="set-grid">${keyRows}</div>
+      <div class="set-note">Keys are written to your local .env (gitignored) and applied immediately.
+        Stored values are never shown back here. Leave a field blank to keep the current key;
+        type a new value to replace it.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Broker &amp; data source</h3>
+      <div class="set-row">
+        <div class="set-label">Broker<div class="set-use">executes orders, shows account &amp; positions</div></div>
+        <select id="set-broker">${brokerOpts(s.broker)}</select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Data source<div class="set-use">feeds the scanner (chains, greeks, spot)</div></div>
+        <select id="set-data_source">${brokerOpts(s.data_source)}</select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Alpaca mode</div>
+        <select id="set-alpaca_paper">
+          <option value="true" ${s.alpaca_paper ? "selected" : ""}>paper (safe)</option>
+          <option value="false" ${s.alpaca_paper ? "" : "selected"}>live (real money)</option>
+        </select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Tradier environment</div>
+        <select id="set-tradier_env">
+          <option value="sandbox" ${s.tradier_env === "sandbox" ? "selected" : ""}>sandbox (paper)</option>
+          <option value="production" ${s.tradier_env === "production" ? "selected" : ""}>production (real money)</option>
+        </select>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Tradier account id<div class="set-use">optional - auto-discovered if blank</div></div>
+        <input type="text" id="set-tradier_account_id" placeholder="${esc(s.values.TRADIER_ACCOUNT_ID || "auto")}" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Live trading</h3>
+      <div class="set-row">
+        <div class="set-label">Allow real-money orders<div class="set-use">required (with typed LIVE) before any live order submits</div></div>
+        <select id="set-live_trading_enabled">
+          <option value="false" ${s.live_trading_enabled ? "" : "selected"}>disabled (recommended)</option>
+          <option value="true" ${s.live_trading_enabled ? "selected" : ""}>enabled</option>
+        </select>
+      </div>
+      <div class="live-warning" id="set-live-warn" style="${liveCombo(s) ? "" : "display:none"}">
+        <strong>Heads up:</strong> your selected broker is a real-money account. Orders still require
+        the typed LIVE confirmation per trade, but there is no paper safety net.
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="set-save" onclick="saveSettings()">Save settings</button>
+      <span class="info" id="set-result"></span>
+    </div>
+
+    <div class="panel" id="scoring-panel"><h3>Scoring weights</h3>
+      <div class="empty">Loading scoring config...</div></div>`;
+
+  // live-warning reacts to broker/env/live changes
+  ["set-broker", "set-alpaca_paper", "set-tradier_env", "set-live_trading_enabled"].forEach((id) => {
+    const el = $("#" + id);
+    if (el) el.addEventListener("change", updateLiveWarn);
+  });
+  loadScoring();
+}
+
+const WEIGHT_LABELS = {
+  delta_fit: "Delta fit", extrinsic: "Extrinsic %", spread: "Spread tightness",
+  open_interest: "Open interest", volume: "Volume", iv_rank: "IV rank",
+  dte_fit: "DTE fit", trend_alignment: "Trend / regime",
+};
+
+async function loadScoring() {
+  const panel = $("#scoring-panel");
+  if (!panel) return;
+  let c;
+  try { c = await api("/scoring-config"); }
+  catch (e) { panel.innerHTML = `<h3>Scoring weights</h3><div class="note">${esc(e.message)}</div>`; return; }
+  const sum = Object.values(c.weights).reduce((a, b) => a + b, 0) || 1;
+  const rows = Object.entries(c.weights).map(([k, v]) => `
+    <div class="set-row">
+      <div class="set-label">${WEIGHT_LABELS[k] || k}
+        <div class="set-use">currently ${(v / sum * 100).toFixed(0)}% of total</div></div>
+      <input type="number" id="w-${k}" min="0" max="100" step="0.05" value="${v}"
+             style="width:90px" oninput="updateWeightPct()">
+    </div>`).join("");
+  panel.innerHTML = `
+    <h3>Scoring weights</h3>
+    <div class="set-note">Weights are relative - they're normalized to 100%, so you can use any
+      scale. Raise what matters to you, zero out what doesn't. Saved to config/scoring.json and
+      applied on the next scan.</div>
+    <div class="set-grid">${rows}</div>
+    <div class="set-row">
+      <div class="set-label">Delta band (target |delta|)<div class="set-use">contracts in this range score best</div></div>
+      <span><input type="number" id="w-delta-min" min="0.01" max="1" step="0.05" value="${c.delta_band.min}" style="width:74px">
+        to <input type="number" id="w-delta-max" min="0.01" max="1" step="0.05" value="${c.delta_band.max}" style="width:74px"></span>
+    </div>
+
+    <h3 style="margin-top:18px;">Filters</h3>
+    <div class="set-note">Each filter is optional - <strong>leave it blank to apply no filter</strong>
+      (nothing ruled out; the scoring weights still rank these traits). A live quote and greeks are
+      always required so a contract can be priced and scored.</div>
+    <div class="set-grid">${filterFields(c.filters)}</div>
+
+    <h3 style="margin-top:18px;">Presets</h3>
+    <div class="set-note">Load a preset to auto-fill recommended settings. Click Save after to apply.</div>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="applyPreset('leaps')" title="Deep ITM, 180-400 DTE, trend-heavy">LEAPS</button>
+      <button class="preset-btn" onclick="applyPreset('standard')" title="Balanced mid-delta, 25-60 DTE">Standard</button>
+      <button class="preset-btn" onclick="applyPreset('momentum')" title="Short-dated momentum, higher volume weight">Momentum</button>
+    </div>
+
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="primary" id="scoring-save" onclick="saveScoring()">Save scoring + filters</button>
+      <button class="small" onclick="resetScoring()">Reset to defaults</button>
+      <span class="info" id="scoring-result"></span>
+    </div>`;
+  panel._defaults = c.defaults;
+}
+
+const FILTER_NUM = ["price_min", "price_max", "min_open_interest", "min_volume", "min_mid"];
+
+function filterFields(f) {
+  f = f || {};
+  const row = (id, label, hint, value, step) => `
+    <div class="set-row">
+      <div class="set-label">${label}<div class="set-use">${hint}</div></div>
+      <input type="number" id="f-${id}" min="0" step="${step}"
+             value="${value === null || value === undefined ? "" : value}"
+             placeholder="off" style="width:120px"></div>`;
+  const spreadVal = f.max_spread_pct == null ? "" : +(f.max_spread_pct * 100).toFixed(2);
+  return [
+    row("price_min", "Underlying price min ($)", "only stocks at/above this share price", f.price_min, "0.01"),
+    row("price_max", "Underlying price max ($)", "only stocks at/below this share price", f.price_max, "0.01"),
+    row("min_open_interest", "Min open interest", "liquidity floor - blank ignores it", f.min_open_interest, "1"),
+    row("min_volume", "Min volume (today)", "blank ignores volume", f.min_volume, "1"),
+    `<div class="set-row"><div class="set-label">Max bid/ask spread (%)
+       <div class="set-use">tightness cap - blank ignores it</div></div>
+       <input type="number" id="f-max_spread_pct" min="0" step="0.5" value="${spreadVal}"
+              placeholder="off" style="width:120px"></div>`,
+    row("min_mid", "Min option price (mid $)", "blank allows any priced contract", f.min_mid, "0.01"),
+    `<div class="set-row"><div class="set-label">Require greeks
+       <div class="set-use">needed to score delta/IV - leave on</div></div>
+       <select id="f-require_greeks" style="width:120px">
+         <option value="true" ${f.require_greeks ? "selected" : ""}>yes</option>
+         <option value="false" ${f.require_greeks ? "" : "selected"}>no</option></select></div>`,
+  ].join("");
+}
+
+function collectFilters() {
+  const filters = {};
+  FILTER_NUM.forEach((k) => {
+    const v = ($("#f-" + k)?.value || "").trim();
+    filters[k] = v === "" ? null : parseFloat(v);
+  });
+  const spr = ($("#f-max_spread_pct")?.value || "").trim();
+  filters.max_spread_pct = spr === "" ? null : parseFloat(spr) / 100;  // % -> fraction
+  filters.require_greeks = $("#f-require_greeks")?.value === "true";
+  return filters;
+}
+
+function updateWeightPct() {
+  const vals = Object.keys(WEIGHT_LABELS).map((k) => parseFloat($("#w-" + k)?.value) || 0);
+  const sum = vals.reduce((a, b) => a + b, 0) || 1;
+  Object.keys(WEIGHT_LABELS).forEach((k) => {
+    const v = parseFloat($("#w-" + k)?.value) || 0;
+    const lbl = $("#w-" + k)?.closest(".set-row")?.querySelector(".set-use");
+    if (lbl) lbl.textContent = `currently ${(v / sum * 100).toFixed(0)}% of total`;
+  });
+}
+
+function resetScoring() {
+  const d = $("#scoring-panel")._defaults;
+  if (!d) return;
+  Object.entries(d.weights).forEach(([k, v]) => { if ($("#w-" + k)) $("#w-" + k).value = v; });
+  $("#w-delta-min").value = d.delta_band.min;
+  $("#w-delta-max").value = d.delta_band.max;
+  // filters default blank (no filter)
+  [...FILTER_NUM, "max_spread_pct"].forEach((k) => { if ($("#f-" + k)) $("#f-" + k).value = ""; });
+  if ($("#f-require_greeks")) $("#f-require_greeks").value = "true";
+  updateWeightPct();
+}
+
+const SCORING_PRESETS = {
+  leaps: {
+    // Deep ITM long-dated calls: trend dominates, IV rank less meaningful,
+    // high dte_fit ensures we stay in 180-400d zone, extrinsic near-zero for ITM
+    weights: { delta_fit: 0.25, extrinsic: 0.02, spread: 0.0, open_interest: 0.05,
+               volume: 0.03, iv_rank: 0.1, dte_fit: 0.3, trend_alignment: 0.5 },
+    delta_min: 0.7, delta_max: 1.0,
+    note: "Select DTE: LEAPS (180-400d) in the scan toolbar to match."
+  },
+  standard: {
+    // Balanced mid-delta calls: all components weighted, standard DTE
+    weights: { delta_fit: 0.2, extrinsic: 0.1, spread: 0.05, open_interest: 0.1,
+               volume: 0.1, iv_rank: 0.2, dte_fit: 0.2, trend_alignment: 0.3 },
+    delta_min: 0.4, delta_max: 0.7,
+    note: "Works well with DTE: Standard (25-60d) or Swing (45-90d)."
+  },
+  momentum: {
+    // Short-dated momentum plays: trend + volume lead, tighter delta range
+    weights: { delta_fit: 0.15, extrinsic: 0.05, spread: 0.05, open_interest: 0.1,
+               volume: 0.2, iv_rank: 0.1, dte_fit: 0.15, trend_alignment: 0.5 },
+    delta_min: 0.5, delta_max: 0.8,
+    note: "Pair with DTE: Closer (7-25d) or Standard for short-dated momentum plays."
+  },
+};
+
+function applyPreset(name) {
+  const p = SCORING_PRESETS[name];
+  if (!p) return;
+  Object.entries(p.weights).forEach(([k, v]) => { if ($("#w-" + k)) $("#w-" + k).value = v; });
+  if (p.delta_min != null) $("#w-delta-min").value = p.delta_min;
+  if (p.delta_max != null) $("#w-delta-max").value = p.delta_max;
+  updateWeightPct();
+  const res = $("#scoring-result");
+  if (res) res.textContent = `${name.charAt(0).toUpperCase() + name.slice(1)} preset loaded. ${p.note || ""} Click Save to apply.`;
+  toast(`${name} preset loaded — click Save to apply`);
+}
+
+async function saveScoring() {
+  const btn = $("#scoring-save");
+  btn.disabled = true; btn.textContent = "Saving...";
+  const weights = {};
+  Object.keys(WEIGHT_LABELS).forEach((k) => { weights[k] = parseFloat($("#w-" + k).value) || 0; });
+  const body = { weights, delta_min: parseFloat($("#w-delta-min").value),
+                 delta_max: parseFloat($("#w-delta-max").value), filters: collectFilters() };
+  try {
+    await api("/scoring-config", { method: "POST", body: JSON.stringify(body) });
+    $("#scoring-result").textContent = "Saved. Re-scan to apply.";
+    toast("Scoring + filters saved");
+    loadScoring();
+  } catch (e) {
+    $("#scoring-result").textContent = "Failed: " + e.message;
+    toast("Save failed: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Save weights";
+  }
+}
+
+function liveCombo(s) {
+  const broker = $("#set-broker") ? $("#set-broker").value : s.broker;
+  if (broker === "public") return true;
+  if (broker === "alpaca") return $("#set-alpaca_paper") ? $("#set-alpaca_paper").value === "false" : !s.alpaca_paper;
+  if (broker === "tradier") return $("#set-tradier_env") ? $("#set-tradier_env").value === "production" : s.tradier_env === "production";
+  return false;
+}
+
+function updateLiveWarn() {
+  const warn = $("#set-live-warn");
+  if (warn) warn.style.display = liveCombo({}) ? "" : "none";
+}
+
+async function saveSettings() {
+  const btn = $("#set-save");
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  const payload = { keys: {} };
+  SECRET_FIELDS.forEach(([key]) => {
+    const v = $("#set-" + key).value.trim();
+    if (v) payload.keys[key] = v;   // blank = keep existing
+  });
+  payload.broker = $("#set-broker").value;
+  payload.data_source = $("#set-data_source").value;
+  payload.alpaca_paper = $("#set-alpaca_paper").value === "true";
+  payload.tradier_env = $("#set-tradier_env").value;
+  payload.live_trading_enabled = $("#set-live_trading_enabled").value === "true";
+  const acct = $("#set-tradier_account_id").value.trim();
+  if (acct) payload.tradier_account_id = acct;
+  try {
+    await api("/settings", { method: "POST", body: JSON.stringify(payload) });
+    $("#set-result").textContent = "Saved and applied.";
+    toast("Settings saved");
+    loadHealth();
+    loadRegime();
+    loadRecs(false);
+    loadSettings();
+  } catch (e) {
+    $("#set-result").textContent = "Failed: " + e.message;
+    toast("Save failed: " + e.message, true);
+    btn.disabled = false;
+    btn.textContent = "Save settings";
+  }
+}
+
+/* ------------------------------ validation ----------------------------- */
+
+async function loadValidation() {
+  try {
+    const rep = await api("/tracking/report");
+    let sourceLine = rep.quote_source
+      ? `Marks (entry + re-quote) via ${rep.quote_source} for a consistent, accurate comparison.`
+      : "";
+    try {
+      const h = await api("/health");
+      const last = h.scan_loop && h.scan_loop.last_tracker_run;
+      sourceLine += last ? ` Last automatic run: ${last}.` : " Automatic daily run is armed (waiting for the next market-day tick).";
+    } catch (e) { /* health optional */ }
+    $("#track-source").textContent = sourceLine;
+    $("#track-summary").innerHTML = [
+      ["Tracked entries", rep.total_tracked],
+      ["With an outcome", rep.with_outcome],
+      ["Still open", rep.open],
+    ].map(([label, value]) => `
+      <div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+
+    const haveData = rep.buckets.some((b) => b.count > 0);
+    $("#track-buckets").innerHTML = haveData ? `
+      <table>
+        <thead><tr><th>Score bucket</th><th>Count</th><th>Avg option return</th>
+        <th>Avg underlying return</th><th>Win rate</th><th>Avg days held</th></tr></thead>
+        <tbody>${rep.buckets.map((b) => `
+          <tr>
+            <td><strong>${esc(b.range)}</strong></td>
+            <td>${b.count}</td>
+            <td>${b.avg_option_return == null ? "-" : signed(b.avg_option_return, 1, "%")}</td>
+            <td>${b.avg_underlying_return == null ? "-" : signed(b.avg_underlying_return, 1, "%")}</td>
+            <td>${b.win_rate == null ? "-" : pct01(b.win_rate)}</td>
+            <td>${b.avg_days_held == null ? "-" : b.avg_days_held}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="set-note">If the score has edge, average option return should trend up as the
+        bucket rises. Compare it to the underlying return to see how much is direction vs structure.</div>`
+      : '<div class="empty">No tracked outcomes yet. Snapshot some picks, then update outcomes after a few days.</div>';
+
+    const t = await api("/tracking?limit=100");
+    $("#track-table").innerHTML = t.items.length ? `
+      <table>
+        <thead><tr><th>Snapshot</th><th>Contract</th><th>Ticker</th><th>Score</th>
+        <th>Entry mid</th><th>Now</th><th>Option ret</th><th>Undl ret</th><th>Days</th><th>Status</th></tr></thead>
+        <tbody>${t.items.map((it) => `
+          <tr>
+            <td class="mut">${esc(it.snapshot_date)}</td>
+            <td class="mono">${esc(it.occ_symbol)}</td>
+            <td><strong>${esc(it.underlying || "")}</strong></td>
+            <td>${scorePill(it.score)}</td>
+            <td>${money(it.entry_mid)}</td>
+            <td>${it.current_mid == null ? "-" : money(it.current_mid)}</td>
+            <td>${it.option_return_pct == null ? "-" : signed(it.option_return_pct, 1, "%")}</td>
+            <td>${it.underlying_return_pct == null ? "-" : signed(it.underlying_return_pct, 1, "%")}</td>
+            <td>${it.days_held == null ? "-" : it.days_held}</td>
+            <td class="mut">${esc(it.status)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>` : '<div class="empty">Nothing tracked yet.</div>';
+  } catch (e) {
+    $("#track-buckets").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+  }
+}
+
+async function trackingSnapshot() {
+  const btn = $("#track-snap");
+  btn.disabled = true; btn.textContent = "Snapshotting...";
+  try {
+    const r = await api("/tracking/snapshot", { method: "POST", body: JSON.stringify({ top_n: 25 }) });
+    $("#track-info").textContent = `Snapshot ${r.snapshot_date}: ${r.new_entries} new of ${r.candidates}.`;
+    toast(`Snapshotted ${r.new_entries} picks`);
+    loadValidation();
+  } catch (e) {
+    toast("Snapshot failed: " + e.message, true);
+  } finally { btn.disabled = false; btn.textContent = "Snapshot top picks now"; }
+}
+
+async function trackingUpdate() {
+  const btn = $("#track-update");
+  btn.disabled = true; btn.textContent = "Updating...";
+  try {
+    const r = await api("/tracking/update", { method: "POST" });
+    $("#track-info").textContent = `Updated ${r.updated} (expired ${r.expired}, errors ${r.errors}).`;
+    toast(`Updated ${r.updated} outcomes`);
+    loadValidation();
+  } catch (e) {
+    toast("Update failed: " + e.message, true);
+  } finally { btn.disabled = false; btn.textContent = "Update outcomes"; }
+}
+
+/* -------------------------------- alerts ------------------------------- */
+
+let alertsMaxSeenId = 0;
+let alertsInitialized = false;
+
+async function loadAlerts() {
+  try {
+    const res = await api("/alerts?limit=50");
+    const items = res.items || [];
+    const unseen = items.filter((a) => !a.seen);
+    const count = $("#alerts-count");
+    count.textContent = unseen.length;
+    count.classList.toggle("hidden", unseen.length === 0);
+
+    const maxId = items.length ? Math.max(...items.map((a) => a.id)) : 0;
+    if (alertsInitialized && maxId > alertsMaxSeenId) {
+      items.filter((a) => a.id > alertsMaxSeenId).slice(0, 3).forEach((a) =>
+        toast(`ALERT: ${a.occ_symbol} scored ${num(a.score, 1)}`));
+    }
+    alertsMaxSeenId = Math.max(alertsMaxSeenId, maxId);
+    alertsInitialized = true;
+
+    $("#alerts-list").innerHTML = items.length ? items.map((a) => `
+      <div class="alert-item">
+        <div><strong>${esc(a.underlying || "")}</strong> <span class="mono">${esc(a.occ_symbol)}</span>
+          ${scorePill(a.score)} ${a.seen ? "" : '<span class="count">new</span>'}</div>
+        <div class="when">${esc((a.created_at || "").replace("T", " ").slice(0, 16))}</div>
+      </div>`).join("") : '<div class="empty">No alerts yet</div>';
+  } catch (e) { /* alerts are non-critical; surfaced via health banner */ }
+}
+
+function toggleAlertsPanel() {
+  $("#alerts-panel").classList.toggle("hidden");
+}
+
+async function markAlertsSeen() {
+  try {
+    await api("/alerts/mark-seen", { method: "POST" });
+    loadAlerts();
+  } catch (e) { toast("Failed: " + e.message, true); }
+}
+
+/* --------------------------------- init -------------------------------- */
+
+async function init() {
+  loadHealth();
+  loadRegime();
+  loadSegments();
+  loadRecs(false);
+  loadAlerts();
+  setInterval(loadHealth, 30000);
+  setInterval(loadAlerts, 60000);
+  setInterval(loadRegime, 300000);
+  setInterval(() => {
+    if (!$("#tab-positions").classList.contains("hidden")) loadPositions();
+  }, 30000);
+}
+init();
+</script>
+</body>
+</html>
