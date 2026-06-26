@@ -57,9 +57,10 @@ alone powers the regime score but not the chain scan.
 
 ### Universe and the prefilter funnel
 
-`config/universe.json` ships the full ~3,175-name Option Panda / Finviz
-universe (avg vol > 400K, price > $1). Deep-scanning that many option chains
-on every refresh is infeasible, so the scanner uses a two-stage funnel:
+`config/universe.json` ships the Option Panda / Finviz universe (avg vol >
+400K, price > $1) with the **Healthcare** sector removed - ~2,587 names.
+Deep-scanning that many option chains on every refresh is infeasible, so the
+scanner uses a two-stage funnel:
 
 1. **Prefilter (cheap):** batch-quote the whole universe through the active
    data source (Tradier/Alpaca handle large symbol lists in a handful of
@@ -82,12 +83,15 @@ tickers shown.
 ### Segmenting by sector / theme
 
 `config/segments.json` maps every universe ticker to its Finviz **sector**
-(11, one per ticker) and the Finviz Elite **themes** it belongs to (~400, many
-per ticker - "AI - Compute & Acceleration", "Quantum Computing", "Nuclear",
-etc.). The Recommendations tab has a sector dropdown and a theme dropdown; the
-scan restricts the universe to the chosen segment *before* prefiltering, so you
-get the best opportunities within that slice. `GET /api/segments` lists them
-with counts; `GET /api/recommendations?sector=Technology&theme=...` scans one.
+(10, one per ticker - Healthcare removed) and the Finviz Elite **themes** it
+belongs to (~400, many per ticker - "AI - Compute & Acceleration", "Quantum
+Computing", "Nuclear", etc.). The Recommendations tab has a multi-select
+sector picker and a theme picker; the scan restricts the universe to the
+chosen segments *before* prefiltering, so you get the best opportunities
+within that slice. `GET /api/segments` lists them with counts;
+`GET /api/recommendations?sector=Technology&sector=Energy&theme=...` scans
+those. An optional `price_min` / `price_max` (also editable in Settings)
+filters by the underlying share price.
 Each result row shows its sector.
 
 ### Targeting expiry (DTE filter)
