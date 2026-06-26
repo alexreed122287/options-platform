@@ -97,10 +97,24 @@ Each result row shows its sector.
 ### Targeting expiry (DTE filter)
 
 A DTE dropdown re-targets the scan's days-to-expiry. By default the band is
-25-60d, so near-term monthlies dominate; pick **Closer (7-25d)**, **Swing
-(45-90d)**, **Further out (90-180d)**, or **LEAPS (180-400d)** to bias toward
-shorter or longer-dated contracts. The selection overrides `dte_band` for both
-the chain fetch window and dte_fit scoring (`GET /api/recommendations?dte=leaps`).
+25-60d, so near-term monthlies dominate; pick **0-1 DTE (0DTE)**, **Closer
+(7-25d)**, **Swing (45-90d)**, **Further out (90-180d)**, or **LEAPS
+(180-400d)** to bias toward shorter or longer-dated contracts. The selection
+overrides `dte_band` for both the chain fetch window and dte_fit scoring
+(`GET /api/recommendations?dte=leaps`).
+
+**DTE-tuned weights:** each preset also carries its own scoring `weights`, so
+picking a DTE automatically re-tunes the weighted score to that horizon -
+short-dated leans on direction + liquidity/tight spreads, long-dated on
+directional conviction + low IV. The per-contract breakdown shows the active
+weights, and the scan line notes "DTE-tuned weights". `default` (no selection)
+uses the top-level `weights`. All profiles live in `config/scoring.json` under
+`dte_presets[].weights` and are hot-reloaded on edit.
+
+> **0-1 DTE caveat:** only a small set of underlyings (major indices/ETFs and
+> a handful of mega-caps) list daily/0-1-day expiries, so a 0-1 DTE scan across
+> the equity universe returns few names - that's expected.
+
 Presets live in `config/scoring.json` under `dte_presets`. Long-dated picks are
 naturally thinner - fewer pass the OI/spread liquidity filters. Regenerate the maps from a fresh Finviz
 export by re-running the import (sector from the CSV, themes from

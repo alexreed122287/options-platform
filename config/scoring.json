@@ -4,14 +4,14 @@
   "top_n": 15,
   "max_contracts_per_ticker": 20,
   "weights": {
-    "delta_fit": 0.2,
-    "extrinsic": 0.15,
-    "spread": 0.15,
+    "delta_fit": 0.18,
+    "extrinsic": 0.14,
+    "spread": 0.14,
     "open_interest": 0.1,
-    "volume": 0.1,
-    "iv_rank": 0.1,
-    "dte_fit": 0.1,
-    "trend_alignment": 0.1
+    "volume": 0.08,
+    "iv_rank": 0.12,
+    "dte_fit": 0.08,
+    "trend_alignment": 0.16
   },
   "delta_band": {
     "_doc": "Target |delta| range. 1.0 inside, linear falloff to 0 over `falloff` outside.",
@@ -26,42 +26,109 @@
     "falloff_days": 15
   },
   "dte_presets": {
-    "_doc": "Selectable expiry targets for the scan's DTE filter. Each overrides dte_band (chain fetch window + dte_fit scoring) for that scan. 'default' (no selection) uses dte_band above.",
+    "_doc": "Selectable expiry targets for the scan's DTE filter. Each overrides dte_band (chain fetch window + dte_fit scoring) AND, when present, the scoring `weights` for that scan - so picking a DTE auto-retunes the weighted score to that horizon. 'default' (no selection) uses the top-level weights + dte_band above.",
     "options": [
+      {
+        "key": "zero_one",
+        "label": "0-1 DTE (0DTE)",
+        "min": 0,
+        "max": 1,
+        "falloff_days": 1,
+        "weights": {
+          "delta_fit": 0.22,
+          "extrinsic": 0.04,
+          "spread": 0.2,
+          "open_interest": 0.1,
+          "volume": 0.18,
+          "iv_rank": 0.02,
+          "dte_fit": 0.02,
+          "trend_alignment": 0.22
+        }
+      },
       {
         "key": "closer",
         "label": "Closer (7-25d)",
         "min": 7,
         "max": 25,
-        "falloff_days": 7
+        "falloff_days": 7,
+        "weights": {
+          "delta_fit": 0.2,
+          "extrinsic": 0.12,
+          "spread": 0.15,
+          "open_interest": 0.1,
+          "volume": 0.1,
+          "iv_rank": 0.1,
+          "dte_fit": 0.05,
+          "trend_alignment": 0.18
+        }
       },
       {
         "key": "standard",
         "label": "Standard (25-60d)",
         "min": 25,
         "max": 60,
-        "falloff_days": 15
+        "falloff_days": 15,
+        "weights": {
+          "delta_fit": 0.18,
+          "extrinsic": 0.14,
+          "spread": 0.14,
+          "open_interest": 0.1,
+          "volume": 0.08,
+          "iv_rank": 0.12,
+          "dte_fit": 0.08,
+          "trend_alignment": 0.16
+        }
       },
       {
         "key": "swing",
         "label": "Swing (45-90d)",
         "min": 45,
         "max": 90,
-        "falloff_days": 20
+        "falloff_days": 20,
+        "weights": {
+          "delta_fit": 0.18,
+          "extrinsic": 0.12,
+          "spread": 0.1,
+          "open_interest": 0.1,
+          "volume": 0.06,
+          "iv_rank": 0.16,
+          "dte_fit": 0.08,
+          "trend_alignment": 0.2
+        }
       },
       {
         "key": "further",
         "label": "Further out (90-180d)",
         "min": 90,
         "max": 180,
-        "falloff_days": 30
+        "falloff_days": 30,
+        "weights": {
+          "delta_fit": 0.22,
+          "extrinsic": 0.12,
+          "spread": 0.07,
+          "open_interest": 0.08,
+          "volume": 0.05,
+          "iv_rank": 0.18,
+          "dte_fit": 0.08,
+          "trend_alignment": 0.2
+        }
       },
       {
         "key": "leaps",
         "label": "LEAPS (180-400d)",
         "min": 180,
         "max": 400,
-        "falloff_days": 60
+        "falloff_days": 60,
+        "weights": {
+          "delta_fit": 0.25,
+          "extrinsic": 0.1,
+          "spread": 0.06,
+          "open_interest": 0.08,
+          "volume": 0.04,
+          "iv_rank": 0.2,
+          "dte_fit": 0.07,
+          "trend_alignment": 0.2
+        }
       }
     ]
   },

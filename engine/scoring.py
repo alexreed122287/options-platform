@@ -419,6 +419,18 @@ class Scanner:
                         "falloff_days": opt.get("falloff_days", base.get("falloff_days", 15))}
         return base
 
+    def _resolve_weights(self, cfg: Dict[str, Any],
+                         dte_preset: Optional[str]) -> Optional[Dict[str, Any]]:
+        """A DTE preset may carry its own scoring `weights` so the weighted
+        score auto-retunes to that horizon. Returns the preset's weights when
+        present, else None (caller keeps the top-level default weights)."""
+        if not dte_preset or dte_preset == "default":
+            return None
+        for opt in cfg.get("dte_presets", {}).get("options", []):
+            if opt.get("key") == dte_preset:
+                return opt.get("weights")
+        return None
+
     async def _prefilter(self, universe: List[str], seg_key: str) -> Tuple[List[str], Dict[str, Any]]:
         """Stage 1: narrow a large universe to the top candidates with cheap
         batch quotes, before the expensive chain scan. Cached per segment for
@@ -480,6 +492,11 @@ class Scanner:
             if price_max is not None:
                 filters["price_max"] = price_max
             cfg = {**cfg, "filters": filters}
+        # A DTE preset can carry its own scoring weights so the weighted score
+        # auto-retunes to the selected horizon.
+        preset_weights = self._resolve_weights(cfg, dte_preset)
+        if preset_weights:
+            cfg = {**cfg, "weights": preset_weights}
         universe = self._filtered_universe(sectors, themes)
         settings = self.config.get("settings")
         sector_of = self.config.get("segments").get("sector_of", {})
@@ -492,6 +509,7 @@ class Scanner:
                "theme": active_themes[0] if len(active_themes) == 1 else (active_themes or None),
                "themes": active_themes,
                "dte": dte_preset or "default", "dte_band": dte_band,
+               "weight_profile": dte_preset if preset_weights else "default",
                "price_min": cfg.get("filters", {}).get("price_min"),
                "price_max": cfg.get("filters", {}).get("price_max")}
 
