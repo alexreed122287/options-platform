@@ -80,6 +80,7 @@
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
   .toolbar .info { color: var(--muted); font-size: 12.5px; }
   .toolbar select { max-width: 220px; }
+  .toolbar .price-input { width: 80px; }
   .ticker-sector { color: var(--muted); font-size: 10.5px; margin-left: 13px; margin-top: 1px; }
   .seg-group { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   button.seg { border: none; border-radius: 0; background: var(--panel); color: var(--muted); padding: 5px 11px; }
@@ -322,9 +323,17 @@
     <div class="panel">
       <div class="toolbar">
         <button class="primary" id="scan-btn" onclick="loadRecs(true)">Refresh Scan</button>
-        <select id="filter-sector" onchange="onFilterChange()" title="Segment by sector">
-          <option value="">All sectors</option>
-        </select>
+        <div class="theme-ms" id="sector-ms-wrap">
+          <button type="button" class="theme-ms-btn" id="sector-ms-btn"
+                  onclick="toggleSectorMs(event)" title="Segment by sector">All sectors</button>
+          <div class="theme-ms-panel hidden" id="sector-ms-panel">
+            <div class="theme-ms-list" id="sector-ms-list"></div>
+            <div class="theme-ms-foot">
+              <button class="small" type="button" onclick="clearSectorMs()">Clear</button>
+              <span id="sector-ms-count" class="mut" style="font-size:11.5px"></span>
+            </div>
+          </div>
+        </div>
         <div class="theme-ms" id="theme-ms-wrap">
           <button type="button" class="theme-ms-btn" id="theme-ms-btn"
                   onclick="toggleThemeMs(event)" title="Segment by Finviz themes">All themes</button>
@@ -341,6 +350,12 @@
         <select id="filter-dte" onchange="onFilterChange()" title="Target days to expiry">
           <option value="">DTE: default</option>
         </select>
+        <input type="number" id="filter-price-min" class="price-input" placeholder="Min $"
+               min="0" step="1" inputmode="decimal" onchange="onFilterChange()"
+               title="Minimum underlying share price">
+        <input type="number" id="filter-price-max" class="price-input" placeholder="Max $"
+               min="0" step="1" inputmode="decimal" onchange="onFilterChange()"
+               title="Maximum underlying share price">
         <button class="small" id="filter-clear" onclick="clearFilters()" style="display:none">Clear</button>
         <span class="seg-group">
           <button class="seg active" id="view-grouped" onclick="setView('grouped')">By ticker</button>
@@ -708,7 +723,7 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith("/regime")) return d.regime;
   if (path.startsWith("/segments")) {
     const counts = {};
-    Object.values(DEMO_SECTOR).forEach((s) => { if (s) counts[s] = (counts[s] || 0) + 1; });
+    Object.values(DEMO_SECTOR).forEach((s) => { if (s && s !== "Healthcare") counts[s] = (counts[s] || 0) + 1; });
     return {
       sectors: Object.entries(counts).map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count),
@@ -718,15 +733,18 @@ async function demoApi(path, opts = {}) {
   }
   if (path.startsWith("/recommendations")) {
     const params = new URLSearchParams((path.split("?")[1]) || "");
-    const sector = params.get("sector"), themes = params.getAll("theme"), dte = params.get("dte");
+    const sectors = params.getAll("sector"), themes = params.getAll("theme"), dte = params.get("dte");
+    const priceMin = params.get("price_min"), priceMax = params.get("price_max");
     const dteBand = dte ? DEMO_DTE_PRESETS.find((p) => p.key === dte) : null;
-    let recs = d.recs;
-    if (sector) recs = recs.filter((r) => DEMO_SECTOR[r.underlying] === sector);
+    let recs = d.recs.filter((r) => DEMO_SECTOR[r.underlying] !== "Healthcare");
+    if (sectors.length) recs = recs.filter((r) => sectors.includes(DEMO_SECTOR[r.underlying]));
     if (themes.length) {
       const members = new Set(themes.flatMap((t) => DEMO_THEMES[t] || []));
       recs = recs.filter((r) => members.has(r.underlying));
     }
     if (dteBand) recs = recs.filter((r) => r.dte >= dteBand.min && r.dte <= dteBand.max);
+    if (priceMin) recs = recs.filter((r) => r.spot >= +priceMin);
+    if (priceMax) recs = recs.filter((r) => r.spot <= +priceMax);
     const map = {};
     [...recs].sort((a, b) => b.score - a.score).forEach((r) => {
       (map[r.underlying] = map[r.underlying] || []).push(r);
@@ -737,13 +755,15 @@ async function demoApi(path, opts = {}) {
       count: contracts.length, contracts,
     })).sort((a, b) => b.best_score - a.best_score);
     const results = groups.flatMap((g) => g.contracts);
-    const fullUniverse = sector || themes.length ? Math.max(40, results.length * 9) : 3175;
+    const fullUniverse = sectors.length || themes.length ? Math.max(40, results.length * 9) : 2587;
     return { as_of: d.regime.as_of, regime: { label: d.regime.label, score: d.regime.score },
              universe_size: fullUniverse, tickers_scanned: Math.min(40, groups.length || 40),
-             segment: { sector: sector || null,
+             segment: { sector: sectors.length === 1 ? sectors[0] : (sectors.length ? sectors : null),
+                        sectors: sectors,
                         themes: themes.length ? themes : null,
                         theme: themes.length === 1 ? themes[0] : null,
-                        dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null },
+                        dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null,
+                        price_min: priceMin ? +priceMin : null, price_max: priceMax ? +priceMax : null },
              prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
              contracts_scanned: 412, contracts_kept: results.length,
              tickers_with_picks: groups.length,
@@ -972,7 +992,7 @@ async function loadRegime() {
 /* ---------------------------- recommendations -------------------------- */
 
 let recsData = null;
-let recsFilter = { sector: "", themes: [], dte: "" };
+let recsFilter = { sectors: [], themes: [], dte: "", priceMin: "", priceMax: "" };
 let segmentsLoaded = false;
 let recsSort = { key: "score", dir: -1 };
 let recsView = "grouped";    // "grouped" (by ticker) or "flat" (all contracts)
@@ -993,11 +1013,22 @@ async function loadSegments() {
   if (segmentsLoaded) return;
   try {
     const s = await api("/segments");
-    const secSel = $("#filter-sector");
+    const secList = $("#sector-ms-list");
+    secList.innerHTML = "";
     (s.sectors || []).forEach((x) => {
-      const o = document.createElement("option");
-      o.value = x.name; o.textContent = `${x.name} (${x.count})`;
-      secSel.appendChild(o);
+      const lbl = document.createElement("label");
+      lbl.className = "theme-ms-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = x.name;
+      cb.addEventListener("change", onSectorMsChange);
+      lbl.appendChild(cb);
+      const txt = document.createElement("span");
+      txt.textContent = `${x.name} `;
+      const cnt = document.createElement("span");
+      cnt.className = "mut"; cnt.textContent = `(${x.count})`;
+      txt.appendChild(cnt);
+      lbl.appendChild(txt);
+      secList.appendChild(lbl);
     });
     const msList = $("#theme-ms-list");
     msList.innerHTML = "";
@@ -1024,6 +1055,38 @@ async function loadSegments() {
     });
     segmentsLoaded = true;
   } catch (e) { /* segments optional; filters just stay at "All" */ }
+}
+
+/* ---- sector multi-select ---- */
+function getSectorMsSelected() {
+  return [...($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])]
+    .map((cb) => cb.value);
+}
+function updateSectorMsBtn() {
+  const sel = getSectorMsSelected();
+  const btn = $("#sector-ms-btn");
+  if (!btn) return;
+  if (!sel.length) { btn.textContent = "All sectors"; btn.classList.remove("active"); }
+  else if (sel.length === 1) { btn.textContent = sel[0]; btn.classList.add("active"); }
+  else { btn.textContent = `${sel.length} sectors`; btn.classList.add("active"); }
+  const cnt = $("#sector-ms-count");
+  if (cnt) cnt.textContent = sel.length ? `${sel.length} selected` : "";
+}
+function onSectorMsChange() {
+  updateSectorMsBtn();
+  onFilterChange();
+}
+function toggleSectorMs(e) {
+  e.stopPropagation();
+  const panel = $("#sector-ms-panel");
+  if (!panel) return;
+  panel.classList.toggle("hidden");
+}
+function clearSectorMs() {
+  ($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateSectorMsBtn();
+  onFilterChange();
 }
 
 /* ---- theme multi-select ---- */
@@ -1067,28 +1130,40 @@ function clearThemeMs() {
   updateThemeMsBtn();
   onFilterChange();
 }
-// close the panel on outside click
+// close the panels on outside click
 document.addEventListener("click", (e) => {
-  const wrap = $("#theme-ms-wrap");
-  if (wrap && !wrap.contains(e.target)) {
-    const panel = $("#theme-ms-panel");
-    if (panel) panel.classList.add("hidden");
-  }
+  [["#theme-ms-wrap", "#theme-ms-panel"], ["#sector-ms-wrap", "#sector-ms-panel"]]
+    .forEach(([wrapSel, panelSel]) => {
+      const wrap = $(wrapSel);
+      if (wrap && !wrap.contains(e.target)) {
+        const panel = $(panelSel);
+        if (panel) panel.classList.add("hidden");
+      }
+    });
 });
 
 function onFilterChange() {
-  recsFilter = { sector: $("#filter-sector").value, themes: getThemeMsSelected(),
-                 dte: $("#filter-dte").value };
-  const hasFilter = recsFilter.sector || recsFilter.themes.length || recsFilter.dte;
+  recsFilter = { sectors: getSectorMsSelected(), themes: getThemeMsSelected(),
+                 dte: $("#filter-dte").value,
+                 priceMin: $("#filter-price-min").value.trim(),
+                 priceMax: $("#filter-price-max").value.trim() };
+  const hasFilter = recsFilter.sectors.length || recsFilter.themes.length ||
+                    recsFilter.dte || recsFilter.priceMin || recsFilter.priceMax;
   $("#filter-clear").style.display = hasFilter ? "" : "none";
   expandedTicker = null; expandedOcc = null;
   loadRecs(true);
 }
 
 function clearFilters() {
-  $("#filter-sector").value = "";
-  clearThemeMs();
+  ($("#sector-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateSectorMsBtn();
+  ($("#theme-ms-list")?.querySelectorAll("input[type=checkbox]:checked") || [])
+    .forEach((cb) => { cb.checked = false; });
+  updateThemeMsBtn();
   $("#filter-dte").value = "";
+  $("#filter-price-min").value = "";
+  $("#filter-price-max").value = "";
   onFilterChange();
 }
 
@@ -1159,9 +1234,11 @@ async function loadRecs(refresh = false) {
   try {
     const params = new URLSearchParams();
     if (refresh) params.set("refresh", "true");
-    if (recsFilter.sector) params.set("sector", recsFilter.sector);
+    (recsFilter.sectors || []).forEach((s) => params.append("sector", s));
     (recsFilter.themes || []).forEach((t) => params.append("theme", t));
     if (recsFilter.dte) params.set("dte", recsFilter.dte);
+    if (recsFilter.priceMin !== "") params.set("price_min", recsFilter.priceMin);
+    if (recsFilter.priceMax !== "") params.set("price_max", recsFilter.priceMax);
     const qs = params.toString();
     recsData = await api("/recommendations" + (qs ? "?" + qs : ""));
     renderRecs();
@@ -1215,10 +1292,17 @@ function renderRecs() {
   const groups = recGroups(d);
   const seg = d.segment || {};
   const dtePhrase = seg.dte_band ? `DTE ${seg.dte_band.min}-${seg.dte_band.max}d` : "";
+  const sectorPhrase = seg.sectors && seg.sectors.length > 1
+    ? `${seg.sectors.length} sectors`
+    : (seg.sector || (seg.sectors && seg.sectors[0]) || "");
   const themePhrase = seg.themes && seg.themes.length > 1
     ? `${seg.themes.length} themes`
     : (seg.theme || (seg.themes && seg.themes[0]) || "");
-  const segPhrase = [seg.sector, themePhrase, dtePhrase].filter(Boolean).join(" + ");
+  const pmin = seg.price_min, pmax = seg.price_max;
+  const pricePhrase = (pmin != null || pmax != null)
+    ? `$${pmin != null ? pmin : "0"}-${pmax != null ? pmax : "∞"}`
+    : "";
+  const segPhrase = [sectorPhrase, themePhrase, dtePhrase, pricePhrase].filter(Boolean).join(" + ");
   const tail = recsView === "flat"
     ? `${(d.results || []).length} contracts ranked`
     : `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, top ${groups.length} tickers shown`;

@@ -54,15 +54,19 @@ async def regime_history(limit: int = Query(30, ge=1, le=365)):
 @router.get("/recommendations")
 async def recommendations(
     refresh: bool = Query(False),
-    sector: Optional[str] = Query(None),
+    sector: List[str] = Query(default=[]),
     theme: List[str] = Query(default=[]),
     dte: Optional[str] = Query(None),
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
 ) -> Dict[str, Any]:
     deps = get_deps()
     segs = deps.config.get("segments")
     # validate against known segments so a typo can't silently scan nothing
-    if sector and sector not in set((segs.get("sector_of") or {}).values()):
-        raise HTTPException(status_code=400, detail=f"unknown sector: {sector}")
+    known_sectors = set((segs.get("sector_of") or {}).values())
+    for sec in sector:
+        if sec and sec not in known_sectors:
+            raise HTTPException(status_code=400, detail=f"unknown sector: {sec}")
     known_themes = segs.get("themes") or {}
     for th in theme:
         if th and th not in known_themes:
@@ -71,9 +75,17 @@ async def recommendations(
         valid = {o["key"] for o in deps.config.get("scoring").get("dte_presets", {}).get("options", [])}
         if dte not in valid:
             raise HTTPException(status_code=400, detail=f"unknown dte preset: {dte}")
+    if price_min is not None and price_min < 0:
+        raise HTTPException(status_code=400, detail="price_min must be >= 0")
+    if price_max is not None and price_max < 0:
+        raise HTTPException(status_code=400, detail="price_max must be >= 0")
+    if price_min is not None and price_max is not None and price_min > price_max:
+        raise HTTPException(status_code=400, detail="price_min must be <= price_max")
+    active_sectors = [s for s in sector if s] or None
     active_themes = [t for t in theme if t] or None
     return await deps.scanner.scan(
-        refresh=refresh, sector=sector or None, themes=active_themes, dte=dte or None
+        refresh=refresh, sectors=active_sectors, themes=active_themes, dte=dte or None,
+        price_min=price_min, price_max=price_max,
     )
 
 

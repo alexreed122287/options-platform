@@ -383,13 +383,15 @@ class Scanner:
                 return {"symbol": symbol, "rows": [], "scanned": 0, "dropped": {},
                         "stale": False, "error": str(exc)}
 
-    def _filtered_universe(self, sector: Optional[str],
+    def _filtered_universe(self, sectors: Optional[List[str]],
                            themes: Optional[List[str]]) -> List[str]:
         universe = self.config.get("universe")["tickers"]
         segs = self.config.get("segments")
-        if sector:
+        active_sectors = [s for s in (sectors or []) if s]
+        if active_sectors:
             sof = segs.get("sector_of", {})
-            universe = [t for t in universe if sof.get(t) == sector]
+            secset = set(active_sectors)
+            universe = [t for t in universe if sof.get(t) in secset]
         active_themes = [t for t in (themes or []) if t]
         if active_themes:
             theme_tickers = segs.get("themes", {})
@@ -400,9 +402,10 @@ class Scanner:
         return universe
 
     @staticmethod
-    def _seg_key(sector: Optional[str], themes: Optional[List[str]]) -> str:
+    def _seg_key(sectors: Optional[List[str]], themes: Optional[List[str]]) -> str:
+        active_sec = sorted(s for s in (sectors or []) if s)
         active = sorted(t for t in (themes or []) if t)
-        return f"{sector or 'all'}|{','.join(active) or 'all'}"
+        return f"{','.join(active_sec) or 'all'}|{','.join(active) or 'all'}"
 
     def _resolve_dte_band(self, cfg: Dict[str, Any], dte_preset: Optional[str]) -> Dict[str, Any]:
         """The active DTE target: a named preset overrides the default dte_band
@@ -460,22 +463,37 @@ class Scanner:
         info.update({"prefiltered": True, "ranked": len(universe), "scanned": len(top)})
         return top, info
 
-    async def _scan_now(self, sector: Optional[str] = None,
+    async def _scan_now(self, sectors: Optional[List[str]] = None,
                         themes: Optional[List[str]] = None,
-                        dte_preset: Optional[str] = None) -> Dict[str, Any]:
+                        dte_preset: Optional[str] = None,
+                        price_min: Optional[float] = None,
+                        price_max: Optional[float] = None) -> Dict[str, Any]:
         base_cfg = self.config.get("scoring")
         dte_band = self._resolve_dte_band(base_cfg, dte_preset)
         cfg = {**base_cfg, "dte_band": dte_band}   # DTE filter applied here
-        universe = self._filtered_universe(sector, themes)
+        # Per-scan underlying price filter from the UI boxes overrides the
+        # configured filters.price_min/price_max for this scan only.
+        if price_min is not None or price_max is not None:
+            filters = {**cfg.get("filters", {})}
+            if price_min is not None:
+                filters["price_min"] = price_min
+            if price_max is not None:
+                filters["price_max"] = price_max
+            cfg = {**cfg, "filters": filters}
+        universe = self._filtered_universe(sectors, themes)
         settings = self.config.get("settings")
         sector_of = self.config.get("segments").get("sector_of", {})
         regime = await self.regime.compute()
         regime01 = regime["score"] / 100.0
+        active_sectors = [s for s in (sectors or []) if s]
         active_themes = [t for t in (themes or []) if t]
-        seg = {"sector": sector,
+        seg = {"sector": active_sectors[0] if len(active_sectors) == 1 else (active_sectors or None),
+               "sectors": active_sectors,
                "theme": active_themes[0] if len(active_themes) == 1 else (active_themes or None),
                "themes": active_themes,
-               "dte": dte_preset or "default", "dte_band": dte_band}
+               "dte": dte_preset or "default", "dte_band": dte_band,
+               "price_min": cfg.get("filters", {}).get("price_min"),
+               "price_max": cfg.get("filters", {}).get("price_max")}
 
         if not universe:
             return {
@@ -488,7 +506,7 @@ class Scanner:
                 "stale": bool(regime.get("stale")),
             }
 
-        scan_list, prefilter_info = await self._prefilter(universe, self._seg_key(sector, themes))
+        scan_list, prefilter_info = await self._prefilter(universe, self._seg_key(sectors, themes))
 
         sem = asyncio.Semaphore(int(settings["scan"].get("concurrency", 3)))
         per_ticker = await asyncio.gather(
@@ -546,18 +564,28 @@ class Scanner:
             "stale": any(r["stale"] for r in per_ticker) or bool(regime.get("stale")),
         }
 
-    async def scan(self, refresh: bool = False, sector: Optional[str] = None,
+    async def scan(self, refresh: bool = False,
+                   sectors: Optional[List[str]] = None,
                    themes: Optional[List[str]] = None, dte: Optional[str] = None,
-                   # legacy single-theme compat
+                   price_min: Optional[float] = None,
+                   price_max: Optional[float] = None,
+                   # legacy single-value compat
+                   sector: Optional[str] = None,
                    theme: Optional[str] = None) -> Dict[str, Any]:
+        effective_sectors = sectors or ([sector] if sector else None)
         effective_themes = themes or ([theme] if theme else None)
         ttl = self.config.get("settings")["cache_ttls_seconds"]["scan"]
-        # result cache is per (segment + DTE); the prefilter cache (inside
-        # _scan_now) is keyed by segment only, so it is reused across DTE presets
-        cache_key = f"scan:result:{self._seg_key(sector, effective_themes)}|{dte or 'default'}"
+        # result cache is per (segment + DTE + price band); the prefilter cache
+        # (inside _scan_now) is keyed by segment only, so it is reused across
+        # DTE presets and price bands.
+        price_key = (f"{price_min if price_min is not None else ''}"
+                     f"-{price_max if price_max is not None else ''}")
+        cache_key = (f"scan:result:{self._seg_key(effective_sectors, effective_themes)}"
+                     f"|{dte or 'default'}|p{price_key}")
 
         async def _compute() -> Dict[str, Any]:
-            return await self._scan_now(sector, effective_themes, dte)
+            return await self._scan_now(effective_sectors, effective_themes, dte,
+                                        price_min, price_max)
 
         if refresh:
             result = await _compute()
