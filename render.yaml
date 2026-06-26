@@ -1,0 +1,43 @@
+# Render Blueprint — deploys the dashboard as an always-on web service.
+#
+# Deploy: sign in at https://render.com with GitHub, then
+#   New +  ->  Blueprint  ->  pick the options-platform repo.
+# Render reads this file and prompts for the secret values below
+# (the ones marked `sync: false`) — they are entered in Render's UI and
+# never stored in git.
+#
+# Free plan sleeps after ~15 min idle and auto-wakes on the next request
+# (~40s cold start, no manual waking). For instant, always-on 24/7, switch
+# the plan to "Starter" in the Render dashboard.
+services:
+  - type: web
+    name: options-platform
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    autoDeploy: true
+    envVars:
+      # Bind to all interfaces and let Render inject $PORT (run.py reads both).
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      # Broker / data wiring (Tradier live).
+      - key: BROKER
+        value: tradier
+      - key: DATA_SOURCE
+        value: tradier
+      - key: TRADIER_ENV
+        value: production
+      # Secrets — entered in the Render dashboard, not committed.
+      - key: TRADIER_ACCESS_TOKEN
+        sync: false
+      - key: DASHBOARD_TOKEN
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
+      # NOTE: LIVE_TRADING_ENABLED is intentionally omitted, so this public
+      # host is read-only (no live order submission). Add it in the Render
+      # dashboard only if you deliberately want to trade from this URL.
