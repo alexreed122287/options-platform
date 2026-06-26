@@ -702,6 +702,7 @@ const DEMO_THEMES = {
   "Mega Cap Tech": ["AAPL", "MSFT", "NVDA", "META"],
 };
 const DEMO_DTE_PRESETS = [
+  { key: "zero_one", label: "0-1 DTE (0DTE)", min: 0, max: 1 },
   { key: "closer", label: "Closer (7-25d)", min: 7, max: 25 },
   { key: "standard", label: "Standard (25-60d)", min: 25, max: 60 },
   { key: "swing", label: "Swing (45-90d)", min: 45, max: 90 },
@@ -763,6 +764,7 @@ async function demoApi(path, opts = {}) {
                         themes: themes.length ? themes : null,
                         theme: themes.length === 1 ? themes[0] : null,
                         dte: dte || "default", dte_band: dteBand ? { min: dteBand.min, max: dteBand.max } : null,
+                        weight_profile: (dte && dte !== "default") ? dte : "default",
                         price_min: priceMin ? +priceMin : null, price_max: priceMax ? +priceMax : null },
              prefilter: { prefiltered: true, ranked: fullUniverse, scanned: Math.min(40, groups.length || 40) },
              contracts_scanned: 412, contracts_kept: results.length,
@@ -1302,7 +1304,10 @@ function renderRecs() {
   const pricePhrase = (pmin != null || pmax != null)
     ? `$${pmin != null ? pmin : "0"}-${pmax != null ? pmax : "∞"}`
     : "";
-  const segPhrase = [sectorPhrase, themePhrase, dtePhrase, pricePhrase].filter(Boolean).join(" + ");
+  const weightPhrase = (seg.weight_profile && seg.weight_profile !== "default")
+    ? "DTE-tuned weights" : "";
+  const segPhrase = [sectorPhrase, themePhrase, dtePhrase, pricePhrase, weightPhrase]
+    .filter(Boolean).join(" + ");
   const tail = recsView === "flat"
     ? `${(d.results || []).length} contracts ranked`
     : `${d.contracts_kept} passed across ${d.tickers_with_picks || groups.length} tickers, top ${groups.length} tickers shown`;
