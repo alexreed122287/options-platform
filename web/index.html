@@ -927,11 +927,17 @@ async function loadHealth() {
       `threshold ${loop.threshold}, runs ${loop.runs}` +
       (loop.last_skip ? ` | last skip: ${loop.last_skip}` : "") +
       (loop.last_error ? ` | last error: ${loop.last_error}` : "");
+    // Check the providers actually in use (active data source + broker), not
+    // a hard-coded one - a Tradier/Public user shouldn't be told to add Alpaca
+    // keys. FMP is optional (it only powers the regime score).
     const missing = [];
-    if (!h.providers.fmp.configured) missing.push("FMP_API_KEY");
-    if (!h.providers.alpaca.configured) missing.push("ALPACA_API_KEY / ALPACA_SECRET_KEY");
+    const ds = (h.data_source || "alpaca").toLowerCase();
+    if (!(h.providers[ds] || {}).configured) missing.push(ds.toUpperCase() + " keys (data source)");
+    const br = (h.broker || "alpaca").toLowerCase();
+    if (br !== ds && !(h.providers[br] || {}).configured) missing.push(br.toUpperCase() + " keys (broker)");
+    if (!(h.providers.fmp || {}).configured) missing.push("FMP key (regime score)");
     setBanner("setup", missing.length
-      ? "Setup: add " + missing.join(" and ") + " to .env, then restart. Market data is unavailable until then."
+      ? "Setup: add " + missing.join(" and ") + " in the Settings tab. Market data is limited until then."
       : null);
   } catch (e) {
     setBanner("stale", "API unreachable: " + e.message);
