@@ -519,18 +519,14 @@ const DEMO = location.hostname.endsWith("github.io")
   || new URLSearchParams(location.search).has("demo");
 
 /* Optional dashboard token (set DASHBOARD_TOKEN in .env when binding
-   HOST=0.0.0.0). First visit with ?key=... stores it, then it travels in a
-   header so the URL stays clean. */
+   HOST=0.0.0.0). ?key=... is stored for the API header AND deliberately LEFT in
+   the address bar: an iOS Home Screen icon runs in its own cookie jar separate
+   from Safari's, so a bookmark/icon whose URL lost the key can never
+   re-authenticate. Keeping it in the URL makes every fresh navigation work. */
 const TOKEN = (() => {
-  const params = new URLSearchParams(location.search);
-  const fromUrl = params.get("key");
-  if (fromUrl) {
-    localStorage.setItem("dash_token", fromUrl);
-    params.delete("key");
-    const rest = params.toString();
-    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
-  }
-  return localStorage.getItem("dash_token");
+  const fromUrl = new URLSearchParams(location.search).get("key");
+  if (fromUrl) localStorage.setItem("dash_token", fromUrl);
+  return fromUrl || localStorage.getItem("dash_token");
 })();
 
 async function api(path, opts = {}) {
