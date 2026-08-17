@@ -214,6 +214,86 @@ def test_filters_still_require_a_quote():
     assert not ok and reason == "no live quote"
 
 
+# ------------------------------------------- delta / extrinsic hard filters
+
+BAND_CFG = {**CFG,
+            "delta_band": {"min": 0.75, "max": 0.82, "falloff": 0.05},
+            "dte_band": {"min": 30, "max": 50, "falloff_days": 8},
+            "filters": {**CFG["filters"],
+                        "enforce_delta_band": True, "enforce_dte_band": True,
+                        "max_extrinsic_pct": 0.30}}
+
+
+def test_delta_filter_rejects_below_band():
+    ok, reason = S.passes_filters(make_contract(delta=0.70), BAND_CFG, spot=100.0)
+    assert not ok and reason == "delta below band"
+
+
+def test_delta_filter_rejects_above_band():
+    ok, reason = S.passes_filters(make_contract(delta=0.90), BAND_CFG, spot=100.0)
+    assert not ok and reason == "delta above band"
+
+
+def test_delta_filter_accepts_inside_band_inclusive():
+    for d in (0.75, 0.78, 0.82):
+        ok, reason = S.passes_filters(make_contract(delta=d), BAND_CFG, spot=100.0)
+        assert ok, f"delta {d} should pass, got {reason}"
+
+
+def test_delta_filter_uses_absolute_value_for_puts():
+    # put deltas are negative; the band is on |delta|
+    ok, _ = S.passes_filters(make_contract(delta=-0.78), BAND_CFG, spot=100.0)
+    assert ok
+
+
+def test_extrinsic_filter_rejects_high_time_premium():
+    # spot 100, strike 90 -> intrinsic 10; mid 20 -> extrinsic 10/20 = 50% > 30%
+    ok, reason = S.passes_filters(
+        make_contract(delta=0.78, mid=20.0, bid=19.9, ask=20.1), BAND_CFG, spot=100.0)
+    assert not ok and reason == "extrinsic too high"
+
+
+def test_extrinsic_filter_accepts_mostly_intrinsic():
+    # spot 100, strike 90 -> intrinsic 10; mid 11 -> extrinsic 1/11 = 9% <= 30%
+    ok, reason = S.passes_filters(
+        make_contract(delta=0.78, mid=11.0, bid=10.9, ask=11.1), BAND_CFG, spot=100.0)
+    assert ok and reason is None
+
+
+def test_extrinsic_filter_skipped_without_spot():
+    # extrinsic is undefined without the underlying price - skip, never reject-all
+    ok, reason = S.passes_filters(
+        make_contract(delta=0.78, mid=20.0, bid=19.9, ask=20.1), BAND_CFG)
+    assert ok and reason is None
+
+
+def test_dte_filter_rejects_outside_active_band():
+    # the exact bug the audit caught: 25 DTE surfacing under a 30-50 target
+    ok, reason = S.passes_filters(make_contract(delta=0.78, dte=25), BAND_CFG, spot=100.0)
+    assert not ok and reason == "dte below band"
+    ok, reason = S.passes_filters(make_contract(delta=0.78, dte=60), BAND_CFG, spot=100.0)
+    assert not ok and reason == "dte above band"
+
+
+def test_dte_gate_follows_the_active_band_not_a_fixed_number():
+    # a DTE preset swaps dte_band; the hard gate must move with it, so a 200-day
+    # LEAPS contract passes under a LEAPS band and fails under the 30-50 band
+    leaps = {**BAND_CFG, "dte_band": {"min": 180, "max": 400, "falloff_days": 60}}
+    ok, _ = S.passes_filters(make_contract(delta=0.78, dte=200), leaps, spot=100.0)
+    assert ok
+    ok, reason = S.passes_filters(make_contract(delta=0.78, dte=200), BAND_CFG, spot=100.0)
+    assert not ok and reason == "dte above band"
+
+
+def test_band_filters_off_when_null():
+    cfg = {**CFG, "filters": {**CFG["filters"],
+                              "enforce_delta_band": False, "enforce_dte_band": False,
+                              "max_extrinsic_pct": None}}
+    ok, _ = S.passes_filters(make_contract(delta=0.20, mid=20.0, bid=19.9, ask=20.1),
+                             cfg, spot=100.0)
+    assert ok
+
+
 # ------------------------------------------------------- composite score
 
 PERFECT_CTX = {"spot": 100.0, "trend01": 1.0, "regime01": 1.0, "iv_rank": 0.0}

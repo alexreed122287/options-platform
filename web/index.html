@@ -1934,7 +1934,11 @@ async function loadScoring() {
     <div class="set-note">Each filter is optional - <strong>leave it blank to apply no filter</strong>
       (nothing ruled out; the scoring weights still rank these traits). A live quote and greeks are
       always required so a contract can be priced and scored.</div>
-    <div class="set-grid">${filterFields(c.filters)}</div>
+    <div class="set-grid">${filterFields({
+      ...c.filters,
+      _delta_lo: c.delta_band?.min, _delta_hi: c.delta_band?.max,
+      _dte_lo: c.dte_band?.min, _dte_hi: c.dte_band?.max,
+    })}</div>
 
     <h3 style="margin-top:18px;">Presets</h3>
     <div class="set-note">Load a preset to auto-fill recommended settings. Click Save after to apply.</div>
@@ -1963,9 +1967,26 @@ function filterFields(f) {
              value="${value === null || value === undefined ? "" : value}"
              placeholder="off" style="width:120px"></div>`;
   const spreadVal = f.max_spread_pct == null ? "" : +(f.max_spread_pct * 100).toFixed(2);
+  const extVal = f.max_extrinsic_pct == null ? "" : +(f.max_extrinsic_pct * 100).toFixed(2);
   return [
     row("price_min", "Underlying price min ($)", "only stocks at/above this share price", f.price_min, "0.01"),
     row("price_max", "Underlying price max ($)", "only stocks at/below this share price", f.price_max, "0.01"),
+    `<div class="set-row"><div class="set-label">Enforce delta band
+       <div class="set-use">hard-cut contracts outside the delta band above (currently
+         ${f._delta_lo ?? "?"}-${f._delta_hi ?? "?"})</div></div>
+       <select id="f-enforce_delta_band" style="width:120px">
+         <option value="true" ${f.enforce_delta_band ? "selected" : ""}>yes</option>
+         <option value="false" ${f.enforce_delta_band ? "" : "selected"}>no</option></select></div>`,
+    `<div class="set-row"><div class="set-label">Enforce DTE band
+       <div class="set-use">hard-cut contracts outside the active DTE target (currently
+         ${f._dte_lo ?? "?"}-${f._dte_hi ?? "?"}d); follows the DTE filter you pick on the scan</div></div>
+       <select id="f-enforce_dte_band" style="width:120px">
+         <option value="true" ${f.enforce_dte_band ? "selected" : ""}>yes</option>
+         <option value="false" ${f.enforce_dte_band ? "" : "selected"}>no</option></select></div>`,
+    `<div class="set-row"><div class="set-label">Max extrinsic (%)
+       <div class="set-use">time premium as % of mid - blank ignores it</div></div>
+       <input type="number" id="f-max_extrinsic_pct" min="0" max="100" step="1" value="${extVal}"
+              placeholder="off" style="width:120px"></div>`,
     row("min_open_interest", "Min open interest", "liquidity floor - blank ignores it", f.min_open_interest, "1"),
     row("min_volume", "Min volume (today)", "blank ignores volume", f.min_volume, "1"),
     `<div class="set-row"><div class="set-label">Max bid/ask spread (%)
@@ -1989,7 +2010,11 @@ function collectFilters() {
   });
   const spr = ($("#f-max_spread_pct")?.value || "").trim();
   filters.max_spread_pct = spr === "" ? null : parseFloat(spr) / 100;  // % -> fraction
+  const ext = ($("#f-max_extrinsic_pct")?.value || "").trim();
+  filters.max_extrinsic_pct = ext === "" ? null : parseFloat(ext) / 100;  // % -> fraction
   filters.require_greeks = $("#f-require_greeks")?.value === "true";
+  filters.enforce_delta_band = $("#f-enforce_delta_band")?.value === "true";
+  filters.enforce_dte_band = $("#f-enforce_dte_band")?.value === "true";
   return filters;
 }
 
@@ -2010,7 +2035,7 @@ function resetScoring() {
   $("#w-delta-min").value = d.delta_band.min;
   $("#w-delta-max").value = d.delta_band.max;
   // filters default blank (no filter)
-  [...FILTER_NUM, "max_spread_pct"].forEach((k) => { if ($("#f-" + k)) $("#f-" + k).value = ""; });
+  [...FILTER_NUM, "max_spread_pct", "max_extrinsic_pct"].forEach((k) => { if ($("#f-" + k)) $("#f-" + k).value = ""; });
   if ($("#f-require_greeks")) $("#f-require_greeks").value = "true";
   updateWeightPct();
 }

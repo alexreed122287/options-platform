@@ -179,7 +179,8 @@ async def update_settings(req: SettingsUpdate) -> Dict[str, Any]:
 
 # numeric filters - null/blank means "no filter"
 FILTER_NUM_KEYS = ("min_open_interest", "min_volume", "max_spread_pct",
-                   "min_mid", "price_min", "price_max")
+                   "min_mid", "price_min", "price_max", "max_extrinsic_pct")
+FILTER_BOOL_KEYS = ("require_greeks", "enforce_delta_band", "enforce_dte_band")
 
 
 class ScoringUpdate(BaseModel):
@@ -197,9 +198,13 @@ async def get_scoring_config() -> Dict[str, Any]:
     return {
         "weights": {k: float(cfg.get("weights", {}).get(k, 0)) for k in WEIGHT_KEYS},
         "delta_band": {"min": band.get("min"), "max": band.get("max")},
+        "dte_band": {"min": cfg.get("dte_band", {}).get("min"),
+                     "max": cfg.get("dte_band", {}).get("max")},
         "filters": {
             **{k: f.get(k) for k in FILTER_NUM_KEYS},
             "require_greeks": bool(f.get("require_greeks", True)),
+            "enforce_delta_band": bool(f.get("enforce_delta_band", False)),
+            "enforce_dte_band": bool(f.get("enforce_dte_band", False)),
         },
         "defaults": {
             "weights": {"delta_fit": 0.2, "extrinsic": 0.15, "spread": 0.15,
@@ -239,8 +244,8 @@ async def update_scoring_config(req: ScoringUpdate) -> Dict[str, Any]:
     if req.filters is not None:
         flt = dict(cfg.get("filters", {}))
         for key, val in req.filters.items():
-            if key == "require_greeks":
-                flt["require_greeks"] = bool(val)
+            if key in FILTER_BOOL_KEYS:
+                flt[key] = bool(val)
                 continue
             if key not in FILTER_NUM_KEYS:
                 raise HTTPException(status_code=400, detail=f"unknown filter: {key}")
@@ -253,6 +258,10 @@ async def update_scoring_config(req: ScoringUpdate) -> Dict[str, Any]:
         pmin, pmax = flt.get("price_min"), flt.get("price_max")
         if pmin is not None and pmax is not None and pmin > pmax:
             raise HTTPException(status_code=400, detail="price_min cannot exceed price_max")
+        ext = flt.get("max_extrinsic_pct")
+        if ext is not None and not (0.0 <= ext <= 1.0):
+            raise HTTPException(status_code=400,
+                                detail="max_extrinsic_pct: must be between 0 and 1 (a fraction, not a percent)")
         cfg["filters"] = flt
 
     with _env_lock:  # reuse the file lock for atomic-ish writes

@@ -4,26 +4,26 @@
   "top_n": 15,
   "max_contracts_per_ticker": 20,
   "weights": {
-    "delta_fit": 0.18,
-    "extrinsic": 0.14,
-    "spread": 0.14,
-    "open_interest": 0.1,
-    "volume": 0.08,
-    "iv_rank": 0.12,
-    "dte_fit": 0.08,
-    "trend_alignment": 0.16
+    "delta_fit": 0.3,
+    "extrinsic": 0.15,
+    "spread": 0.04,
+    "open_interest": 0.04,
+    "volume": 0.02,
+    "iv_rank": 0.0,
+    "dte_fit": 0.2,
+    "trend_alignment": 0.25
   },
   "delta_band": {
     "_doc": "Target |delta| range. 1.0 inside, linear falloff to 0 over `falloff` outside.",
-    "min": 0.65,
-    "max": 0.85,
-    "falloff": 0.15
+    "min": 0.75,
+    "max": 0.82,
+    "falloff": 0.05
   },
   "dte_band": {
     "_doc": "Default target days-to-expiry range, falloff in days. Also widens the chain fetch window. The UI DTE filter overrides this per scan using dte_presets below.",
-    "min": 25,
-    "max": 60,
-    "falloff_days": 15
+    "min": 30,
+    "max": 50,
+    "falloff_days": 8
   },
   "dte_presets": {
     "_doc": "Selectable expiry targets for the scan's DTE filter. Each overrides dte_band (chain fetch window + dte_fit scoring) AND, when present, the scoring `weights` for that scan - so picking a DTE auto-retunes the weighted score to that horizon. 'default' (no selection) uses the top-level weights + dte_band above.",
@@ -135,15 +135,15 @@
   "extrinsic": {
     "_doc": "Extrinsic premium as fraction of mid. <= best_max_pct scores 1.0, >= worst_pct scores 0.0.",
     "best_max_pct": 0.1,
-    "worst_pct": 0.4
+    "worst_pct": 0.3
   },
   "spread": {
     "_doc": "(ask - bid) / mid. <= best_max_pct scores 1.0, >= worst_pct scores 0.0.",
     "best_max_pct": 0.02,
-    "worst_pct": 0.1
+    "worst_pct": 0.25
   },
   "open_interest": {
-    "floor": 100,
+    "floor": 10,
     "full_credit": 2000
   },
   "volume": {
@@ -161,18 +161,21 @@
     "regime_weight": 0.4
   },
   "filters": {
-    "_doc": "Optional hard filters - null/blank means NO filter (nothing ruled out); the scoring weights still rank these traits. A tradeable quote (positive bid/ask/mid) and greeks are always required so a contract can be priced and scored. price_min/price_max filter by the UNDERLYING share price.",
-    "min_open_interest": null,
+    "_doc": "Optional hard filters - null/blank means NO filter. A tradeable quote (positive bid/ask/mid) is always required. price_min/price_max filter by the UNDERLYING share price. max_extrinsic_pct is a fraction (0.30 = 30%). enforce_delta_band / enforce_dte_band turn the ACTIVE delta_band / dte_band into hard cuts - they follow the DTE preset and any scoring preset rather than duplicating the numbers, so the gate can never contradict the band.",
+    "min_open_interest": 10,
     "min_volume": null,
-    "max_spread_pct": null,
+    "max_spread_pct": 0.25,
     "min_mid": null,
     "require_greeks": true,
-    "price_min": null,
-    "price_max": null
+    "price_min": 1.0,
+    "price_max": null,
+    "max_extrinsic_pct": 0.3,
+    "enforce_delta_band": true,
+    "enforce_dte_band": true
   },
   "chain_window": {
     "_doc": "Strike window fetched per underlying relative to spot; expiry window is the dte band padded by falloff_days.",
-    "strike_itm_pct": 0.3,
-    "strike_otm_pct": 0.08
+    "strike_itm_pct": 0.45,
+    "strike_otm_pct": 0.05
   }
 }

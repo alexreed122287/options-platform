@@ -179,7 +179,14 @@ def prefilter_rank(quotes: Dict[str, Dict[str, Any]], cfg: Dict[str, Any]) -> Li
     return ranked
 
 
-def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any],
+                   spot: Optional[float] = None) -> Tuple[bool, Optional[str]]:
+    """Hard include/exclude gate applied before scoring.
+
+    `spot` is only needed for the extrinsic filter (extrinsic is a function of
+    the underlying price); without it that one filter is skipped rather than
+    silently rejecting everything.
+    """
     f = cfg["filters"]
     mid = contract.get("mid")
     # Baseline: a contract must have a tradeable quote and (optionally) greeks
@@ -201,6 +208,35 @@ def passes_filters(contract: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool,
         spr = spread_pct(contract)
         if spr is None or spr > f["max_spread_pct"]:
             return False, "spread too wide"
+    # Band enforcement. delta_band/dte_band drive *scoring* with a falloff, so
+    # near-miss contracts still rank and therefore still appear. These flags
+    # turn the same bands into hard cuts. They intentionally read the ACTIVE
+    # bands rather than duplicating the numbers, so a DTE preset (or a scoring
+    # preset that widens delta_band) moves the hard gate with it instead of
+    # silently contradicting it.
+    if f.get("enforce_delta_band"):
+        delta = contract.get("delta")
+        if delta is None:
+            return False, "delta unavailable"
+        band = cfg["delta_band"]
+        adelta = abs(delta)
+        if adelta < band["min"]:
+            return False, "delta below band"
+        if adelta > band["max"]:
+            return False, "delta above band"
+    if f.get("enforce_dte_band"):
+        dte = contract.get("dte")
+        if dte is None:
+            return False, "dte unavailable"
+        band = cfg["dte_band"]
+        if dte < band["min"]:
+            return False, "dte below band"
+        if dte > band["max"]:
+            return False, "dte above band"
+    if f.get("max_extrinsic_pct") is not None and spot:
+        ext = extrinsic_pct(mid, contract.get("strike"), spot, cfg.get("side", "call"))
+        if ext is None or ext > f["max_extrinsic_pct"]:
+            return False, "extrinsic too high"
     return True, None
 
 
@@ -364,7 +400,7 @@ class Scanner:
                 rows = []
                 dropped: Dict[str, int] = {}
                 for contract in chain.data:
-                    ok, reason = passes_filters(contract, cfg)
+                    ok, reason = passes_filters(contract, cfg, spot)
                     if not ok:
                         dropped[reason] = dropped.get(reason, 0) + 1
                         continue
