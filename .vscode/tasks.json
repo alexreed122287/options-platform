@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Tests: all",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/pytest -q",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: current file",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/pytest -vv ${relativeFile}",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Watch: tests (auto-rerun on save)",
+      "type": "shell",
+      "command": "bash \"$HOME/.local/bin/watch-tests.sh\" \"${workspaceFolder}\" \"${workspaceFolder}/.venv/bin/pytest\" -q",
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Server: run.py",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python run.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Share: cloudflared tunnel (8787)",
+      "type": "shell",
+      "command": "cloudflared tunnel --url http://localhost:8787",
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // run.py starts uvicorn; dashboard serves on port 8787
+      "name": "Server: run.py (uvicorn)",
+      "type": "debugpy", "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": false
+    },
+    {
+      "name": "Smoke test",
+      "type": "debugpy", "request": "launch",
+      "program": "${workspaceFolder}/data/smoke_test.py",
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": false
+    },
+    {
+      "name": "Current file",
+      "type": "debugpy", "request": "launch", "program": "${file}",
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": false
+    },
+    {
+      "name": "Pytest: current file",
+      "type": "debugpy", "request": "launch", "module": "pytest",
+      "args": ["-vv", "${file}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": false
+    },
+    {
+      // Attach to the server that is ALREADY serving on 8787 rather than starting a
+      // second one (which would fail to bind the port). Pick the run.py / uvicorn
+      // process when prompted. Uses the Python extension's bundled debugger, so
+      // there is nothing to install into the venv.
+      "name": "Attach: running server (pick process)",
+      "type": "debugpy", "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": false
+    }
+  ]
+}
